@@ -14,25 +14,40 @@ case class Example[+X, +Y](input: X, output: Y)
 trait Splitter[-X] extends Function[X, Boolean] {
   def choose[T](input: X)(left: T, right: T): T = if (apply(input)) left else right
 }
-case class FeatureThreshold[+F, V: Ordering](feature: F, threshold: V)(implicit ord: Ordering[V]) extends Splitter[F => V] {
-  override def apply(input: F => V): Boolean = ord.lteq(input(feature), threshold)
+case class FeatureThreshold[+F, X](feature: F, threshold: Double)
+                                  (implicit CF: FeatureSet.Continuous[F, X]) extends Splitter[X] {
+  override def apply(input: X): Boolean = CF.get(input)(feature) <= threshold
   override def toString: String = s"$feature <= $threshold"
 }
-
+case class BoolSplitter[+F, -X](feature: F)(implicit BF: FeatureSet.Binary[F, X]) extends Splitter[X] {
+  override def apply(input: X): Boolean = BF.get(input)(feature)
+  override def toString: String = s"$feature"
+}
 
 sealed trait DecisionTree[-X, +Y] {
   def depth: Int
   def predict(input: X): Y
+  def prettyPrint(indent: String = ""): String
+  override def toString: String = prettyPrint()
 }
 case class Split[-X, Y](split: Splitter[X],
                         left: DecisionTree[X, Y],
                         right: DecisionTree[X, Y]) extends DecisionTree[X, Y] {
   override val depth = max(left.depth, right.depth) + 1
   final override def predict(input: X): Y = split.choose(input)(left, right).predict(input)
+  override def prettyPrint(indent: String): String = {
+    val indented = indent + "  "
+    indent + s"Split(\n" +
+        indented + split + "\n" +
+        left.prettyPrint(indented) + ",\n" +
+        right.prettyPrint(indented) + "\n" +
+    indent + ")"
+  }
 }
 case class Leaf[-X, Y](constant: Y) extends DecisionTree[X, Y] {
   override val depth = 1
   final override def predict(input: X): Y = constant
+  override def prettyPrint(indent: String): String = indent + s"Leaf($constant)"
 }
 object Leaf {
   def averaging[X, Y: Field](examples: Iterable[Weighted[Example[X, Y]]]): Leaf[X, Y] = {
@@ -42,38 +57,42 @@ object Leaf {
 }
 
 object RegressionTree {
+  import FeatureSet.Mixed
   val tolerance = 1e-7
 
-  def fit[F, V: Ordering](data: Iterable[Weighted[Example[F => V, Double]]],
-                          features: Iterable[F],
-                          maxDepth: Int): DecisionTree[F => V, Double] = {
+  def fit[F, X](data: Iterable[Weighted[Example[X, Double]]],
+                maxDepth: Int)
+               (implicit mf: Mixed[F, X]): DecisionTree[X, Double] =
+  {
     val mseStats = WeightedMse.Stats.of(data.map(_.map(_.output)))
     if (maxDepth <= 1 || data.isEmpty || mseStats.meanSquaredError <= tolerance) {
       Leaf.averaging(data)
     } else {
-      val (split, error) = bestSplitAndError(data, features)
+      val (split, _) = bestSplitAndError(data)
       val (leftData, rightData) = data.partition(e => split(e.input))
       if (leftData.isEmpty || rightData.isEmpty) {
         Leaf.averaging(data)
       } else {
-        val left = fit(leftData, features, maxDepth - 1)
-        val right = fit(rightData, features, maxDepth - 1)
+        val left = fit(leftData, maxDepth - 1)
+        val right = fit(rightData, maxDepth - 1)
         Split(split, left, right)
       }
     }
   }
 
   // finds the split that minimizes squared error
-  private def bestSplitAndError[F, V: Ordering](examples: Iterable[Weighted[Example[F => V, Double]]],
-                                                features: Iterable[F]): (Splitter[F => V], Double) = {
+  private def bestSplitAndError[F, X](examples: Iterable[Weighted[Example[X, Double]]])
+                                     (implicit m: Mixed[F, X]): (Splitter[X], Double) = {
     import com.samthomson.WeightedMse.{Stats => MseStats}
     val am = MseStats.hasAdditiveMonoid[Double]
+    implicit val binary = m.binary
+    implicit val continuous = m.continuous
 
-    val splitsAndErrs = features.toSeq.flatMap(feature => {
+    val continuousSplitsAndErrs = m.continuous.feats.toSeq.flatMap(feature => {
       val statsByThreshold =
-          examples.groupBy(_.input(feature))
+          examples.groupBy(e => m.continuous.get(e.input)(feature))
               .mapValues(exs => MseStats.of(exs.map(_.map(_.output)))).toVector.sortBy(_._1)
-      val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold(feature, v))
+      val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold[F, X](feature, v))
       val errors = {
         // errors of left and right side of each split value
         val leftErrors = statsByThreshold.map(_._2).scanLeft(am.zero)(am.plus).tail
@@ -84,6 +103,14 @@ object RegressionTree {
       }
       splits zip errors
     })
-    splitsAndErrs.minBy(_._2)
+    val binarySplitsAndErrs = m.binary.feats.toSeq.map(feature => {
+      val stats = examples.groupBy(e => m.binary.get(e.input)(feature))
+                    .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
+      val l = stats.getOrElse(true, am.zero)
+      val r = stats.getOrElse(false, am.zero)
+      val error = l.weight * l.meanSquaredError + r.weight * r.meanSquaredError
+      (BoolSplitter(feature), error)
+    })
+    (continuousSplitsAndErrs ++ binarySplitsAndErrs).minBy(_._2)
   }
 }
