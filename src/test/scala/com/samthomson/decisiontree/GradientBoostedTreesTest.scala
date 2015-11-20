@@ -1,5 +1,6 @@
 package com.samthomson.decisiontree
 
+import com.samthomson.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassSquaredHinge}
 import com.samthomson.{Weighted, TestHelpers}
 import com.samthomson.decisiontree.FeatureSet.Mixed._
 import org.scalatest.{Matchers, FlatSpec}
@@ -24,12 +25,22 @@ object GradientBoostedTreesTest {
 class GradientBoostedTreesTest extends FlatSpec with TestHelpers with Matchers {
   import GradientBoostedTreesTest._
 
-  "GradientBoostedTreesTest.hingeBoost" should "fit perfectly given enough depth and iterations" in {
-    val boostedForest = GradientBoostedTrees.hingeBoost(data, outputSpace, 4, 200)(xyFeats)
+  "GradientBoostedTreesTest.fit" should "fit perfectly using MultiClassHinge" in {
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassHinge(), 4, 200)(xyFeats)
 //    println(boostedForest)
     for (d <- data) {
-      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
+//      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
       boostedForest.predict(d.input) should be (d.output)
     }
   }
+
+  it should "fit perfectly using MultiClassSquaredHinge" in {
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassSquaredHinge(), 4, 200)(xyFeats)
+    //    println(boostedForest)
+    for (d <- data) {
+      //      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
+      boostedForest.predict(d.input) should be (d.output)
+    }
+  }
+
 }

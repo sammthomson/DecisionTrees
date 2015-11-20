@@ -1,7 +1,9 @@
 package com.samthomson.decisiontree
 
 import com.samthomson.LazyStats.weightedMean
-import com.samthomson.{WeightedMse, Weighted}
+import com.samthomson.Weighted
+import com.samthomson.WeightedMse.{Stats => MseStats}
+import com.samthomson.data.TraversableOnceOps._
 import spire.algebra.Field
 import spire.implicits._
 
@@ -59,12 +61,12 @@ object Leaf {
 object RegressionTree {
   import FeatureSet.Mixed
   val tolerance = 1e-7
+  val evenWeightPreference = 0.1
 
   def fit[F, X](data: Iterable[Weighted[Example[X, Double]]],
                 maxDepth: Int)
-               (implicit mf: Mixed[F, X]): DecisionTree[X, Double] =
-  {
-    val mseStats = WeightedMse.Stats.of(data.map(_.map(_.output)))
+               (implicit mf: Mixed[F, X]): DecisionTree[X, Double] = {
+    val mseStats = MseStats.of(data.map(_.map(_.output)))
     if (maxDepth <= 1 || data.isEmpty || mseStats.meanSquaredError <= tolerance) {
       Leaf.averaging(data)
     } else {
@@ -83,10 +85,11 @@ object RegressionTree {
   // finds the split that minimizes squared error
   private def bestSplitAndError[F, X](examples: Iterable[Weighted[Example[X, Double]]])
                                      (implicit m: Mixed[F, X]): (Splitter[X], Double) = {
-    import com.samthomson.WeightedMse.{Stats => MseStats}
     val am = MseStats.hasAdditiveMonoid[Double]
     implicit val binary = m.binary
     implicit val continuous = m.continuous
+    // TODO: cache
+    val idealWeight = examples.map(_.weight).sum / 2.0
 
     val continuousSplitsAndErrs = m.continuous.feats.toSeq.flatMap(feature => {
       val statsByThreshold =
@@ -98,7 +101,8 @@ object RegressionTree {
         val leftErrors = statsByThreshold.map(_._2).scanLeft(am.zero)(am.plus).tail
         val rightErrors = statsByThreshold.map(_._2).scanRight(am.zero)(am.plus).tail
         for ((l, r) <- leftErrors zip rightErrors) yield {
-          l.weight * l.meanSquaredError + r.weight * r.meanSquaredError
+          l.weight * l.meanSquaredError + r.weight * r.meanSquaredError +
+              evenWeightPreference * math.abs(l.weight - idealWeight)
         }
       }
       splits zip errors
@@ -108,9 +112,12 @@ object RegressionTree {
                     .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
       val l = stats.getOrElse(true, am.zero)
       val r = stats.getOrElse(false, am.zero)
-      val error = l.weight * l.meanSquaredError + r.weight * r.meanSquaredError
+      val error =
+        l.weight * l.meanSquaredError + r.weight * r.meanSquaredError +
+            evenWeightPreference * math.abs(l.weight - idealWeight)
       (BoolSplitter(feature), error)
     })
+    // break ties by most evenly weighted split
     (continuousSplitsAndErrs ++ binarySplitsAndErrs).minBy(_._2)
   }
 }
