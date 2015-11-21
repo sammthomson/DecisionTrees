@@ -3,7 +3,6 @@ package com.samthomson.decisiontree
 import com.samthomson.LazyStats.weightedMean
 import com.samthomson.Weighted
 import com.samthomson.WeightedMse.{Stats => MseStats}
-import com.samthomson.data.TraversableOnceOps._
 import spire.algebra.Field
 import spire.implicits._
 

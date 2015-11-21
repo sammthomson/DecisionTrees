@@ -1,6 +1,6 @@
 package com.samthomson.decisiontree
 
-import com.samthomson.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassSquaredHinge}
+import com.samthomson.decisiontree.TwiceDiffableLoss.{MultiClassLogLoss, MultiClassHinge, MultiClassSquaredHinge}
 import com.samthomson.{Weighted, TestHelpers}
 import com.samthomson.decisiontree.FeatureSet.Mixed._
 import org.scalatest.{Matchers, FlatSpec}
@@ -14,11 +14,11 @@ object GradientBoostedTreesTest {
   }
 
   val data: Vector[Weighted[Example[MixedMap[String], String]]] = Vector(
-    Example(MixedMap(Map() /*"is_animal" -> true)*/, Map("tail_length" -> -1.0)), "dog"),
-    Example(MixedMap(Map() /*"is_animal" -> true)*/, Map("tail_length" ->  0.0)),  "cat"),
-    Example(MixedMap(Map() /*"is_animal" -> true)*/, Map("tail_length" ->  1.0)),  "dog"),
-    Example(MixedMap(Map() /*"is_animal" -> true)*/, Map("tail_length" ->  1.1)),  "dog"),
-    Example(MixedMap(Map() /*"is_animal" -> true)*/, Map("tail_length" ->  1.2)),  "cat")
+    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" -> -1.0)), "dog"),
+    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  0.0)),  "cat"),
+    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.0)),  "dog"),
+    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.1)),  "dog"),
+    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.2)),  "cat")
   ).map(Weighted(_, 1.0))
 }
 
@@ -36,11 +36,15 @@ class GradientBoostedTreesTest extends FlatSpec with TestHelpers with Matchers {
 
   it should "fit perfectly using MultiClassSquaredHinge" in {
     val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassSquaredHinge(), 4, 200)(xyFeats)
-    //    println(boostedForest)
     for (d <- data) {
-      //      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
+  it should "fit perfectly using MultiClassLogLoss" in {
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassLogLoss(), 4, 200)(xyFeats)
+    for (d <- data) {
+      boostedForest.predict(d.input) should be (d.output)
+    }
+  }
 }
