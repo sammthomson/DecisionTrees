@@ -2,6 +2,13 @@ package com.samthomson.decisiontree
 
 import scala.language.implicitConversions
 
+
+/**
+  * Evidence that Xs can hold features of type F with value V
+  * @tparam F the type of features
+  * @tparam V the type of feature values
+  * @tparam X the type of objects that map F => V
+  */
 trait FeatureSet[F, +V, -X] {
   def feats: Set[F]
   def get(x: X)(feat: F): V

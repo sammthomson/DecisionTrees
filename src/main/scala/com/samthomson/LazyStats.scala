@@ -18,7 +18,7 @@ object WeightedMean {
   def of[N: Field](xs: TraversableOnce[Weighted[N]]): N = Stats.of(xs).mean
 
   // sufficient statistic for calculating online mean
-  case class Stats[+N](weight: Double, mean: N)
+  case class Stats[N](weight: Double, mean: N)
 
   object Stats {
     def of[N: Field](x: Weighted[N]): Stats[N] = Stats(x.weight, x.unweighted)
@@ -44,7 +44,10 @@ object WeightedMse {
   def of[N: Field](xs: TraversableOnce[Weighted[N]]): N = Stats.of(xs).meanSquaredError
 
   // sufficient statistic for calculating online mean squared error
-  case class Stats[+N](weight: Double, mean: N, meanSquaredError: N)
+  case class Stats[N](weight: Double, mean: N, meanSquaredError: N) {
+    def sum(implicit F: Field[N]): N = weight * mean
+    def error(implicit F: Field[N]): N = weight * meanSquaredError
+  }
 
   object Stats {
     def of[N: Field](wx: Weighted[N]): Stats[N] = Stats(wx.weight, wx.unweighted, Field[N].zero)

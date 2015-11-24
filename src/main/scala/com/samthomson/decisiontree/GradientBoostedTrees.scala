@@ -23,6 +23,8 @@ object GradientBoostedTrees {
   def fit[F, X, Y](data: Iterable[Weighted[Example[X, Y]]],
                    outputSpace: Iterable[Y],
                    lossFn: TwiceDiffableLoss[Y, Map[Y, Double]],
+                   lambda0: Double,
+                   lambda2: Double,
                    maxDepth: Int,
                    numIterations: Int)
                   (implicit xyFeats: FeatureSet.Mixed[F, (X, Y)]): MultiClassForest[X, Y] = {
@@ -42,12 +44,12 @@ object GradientBoostedTrees {
           val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores)
           totalLoss += loss
   //      println(s"negGrad: \t ${negGradient.map(_.unweighted)}")
-          val proxPenalty = 1e-2 * sqrt(i)  // take smaller steps in later iterations
+//          val lambda2 = 1e-2 * sqrt(i)  // take smaller steps in later iterations
           gradient.map({ case (y, grad) =>
-            val hess = hessian(y) + proxPenalty
+            val hess = hessian(y) + lambda2
             Weighted(Example((input, y), -grad / hess), w * hess) })
         })
-        val tree = RegressionTree.fit(residuals, maxDepth)
+        val tree = RegressionTree.fit(residuals, lambda0, maxDepth)
 //        println(s"tree: \t $tree")
         if (tree != Leaf(0.0)) {
           println(s"loss: $totalLoss")

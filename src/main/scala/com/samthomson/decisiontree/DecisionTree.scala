@@ -25,6 +25,7 @@ case class BoolSplitter[+F, -X](feature: F)(implicit BF: FeatureSet.Binary[F, X]
   override def toString: String = s"$feature"
 }
 
+
 sealed trait DecisionTree[-X, +Y] {
   def depth: Int
   def predict(input: X): Y
@@ -57,25 +58,31 @@ object Leaf {
   }
 }
 
+
 object RegressionTree {
   import FeatureSet.Mixed
-  val tolerance = 1e-7
-  val evenWeightPreference = 0.1
+  val tolerance = 1e-6
+  // prefer evenly weighted splits (for symmetry breaking)
+  val evenWeightPreference = 1e-3
 
   def fit[F, X](data: Iterable[Weighted[Example[X, Double]]],
+                lambda0: Double,
                 maxDepth: Int)
                (implicit mf: Mixed[F, X]): DecisionTree[X, Double] = {
-    val mseStats = MseStats.of(data.map(_.map(_.output)))
-    if (maxDepth <= 1 || data.isEmpty || mseStats.meanSquaredError <= tolerance) {
+    val mseStats = MseStats.of(data.map(_.map(_.output)))  // TODO: cache
+    val baseError = mseStats.error
+    if (maxDepth <= 1 || data.isEmpty || baseError <= tolerance) {
       Leaf.averaging(data)
     } else {
-      val (split, _) = bestSplitAndError(data)
+      val (split, error) = bestSplitAndError(data)
       val (leftData, rightData) = data.partition(e => split(e.input))
-      if (leftData.isEmpty || rightData.isEmpty) {
+      // TODO: Better to prune afterwards than to stop early. Sometimes you need to make splits
+      // that don't improve in order to make later splits that do improve.
+      if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
         Leaf.averaging(data)
       } else {
-        val left = fit(leftData, maxDepth - 1)
-        val right = fit(rightData, maxDepth - 1)
+        val left = fit(leftData, lambda0, maxDepth - 1)
+        val right = fit(rightData, lambda0, maxDepth - 1)
         Split(split, left, right)
       }
     }
@@ -87,9 +94,6 @@ object RegressionTree {
     val am = MseStats.hasAdditiveMonoid[Double]
     implicit val binary = m.binary
     implicit val continuous = m.continuous
-    // TODO: cache
-    val idealWeight = examples.map(_.weight).sum / 2.0
-
     val continuousSplitsAndErrs = m.continuous.feats.toSeq.flatMap(feature => {
       val statsByThreshold =
           examples.groupBy(e => m.continuous.get(e.input)(feature))
@@ -99,10 +103,7 @@ object RegressionTree {
         // errors of left and right side of each split value
         val leftErrors = statsByThreshold.map(_._2).scanLeft(am.zero)(am.plus).tail
         val rightErrors = statsByThreshold.map(_._2).scanRight(am.zero)(am.plus).tail
-        for ((l, r) <- leftErrors zip rightErrors) yield {
-          l.weight * l.meanSquaredError + r.weight * r.meanSquaredError +
-              evenWeightPreference * math.abs(l.weight - idealWeight)
-        }
+        for ((l, r) <- leftErrors zip rightErrors) yield totalErrAndEvenness(l, r)
       }
       splits zip errors
     })
@@ -111,12 +112,13 @@ object RegressionTree {
                     .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
       val l = stats.getOrElse(true, am.zero)
       val r = stats.getOrElse(false, am.zero)
-      val error =
-        l.weight * l.meanSquaredError + r.weight * r.meanSquaredError +
-            evenWeightPreference * math.abs(l.weight - idealWeight)
-      (BoolSplitter(feature), error)
+      (BoolSplitter(feature), totalErrAndEvenness(l, r))
     })
-    // break ties by most evenly weighted split
-    (continuousSplitsAndErrs ++ binarySplitsAndErrs).minBy(_._2)
+    val (split, (err, _)) = (continuousSplitsAndErrs ++ binarySplitsAndErrs).minBy({ case (s, (er, even)) => er + even })
+    (split, err)
+  }
+
+  def totalErrAndEvenness[X, F](l: MseStats[Double], r: MseStats[Double]): (Double, Double) = {
+    (l.error + r.error, evenWeightPreference * math.abs(l.weight - r.weight))
   }
 }

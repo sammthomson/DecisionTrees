@@ -12,7 +12,8 @@ object GradientBoostedTreesTest {
     val outputFeats = FeatureSet.oneHot(outputSpace)
     FeatureSet.Mixed.concat(inputFeats, outputFeats)
   }
-
+  val lambda0 = 0.0 // 1e-7
+  val lambda2 = 1.0
   val data: Vector[Weighted[Example[MixedMap[String], String]]] = Vector(
     Example(MixedMap(Map("is_animal" -> true), Map("tail_length" -> -1.0)), "dog"),
     Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  0.0)),  "cat"),
@@ -26,7 +27,7 @@ class GradientBoostedTreesTest extends FlatSpec with TestHelpers with Matchers {
   import GradientBoostedTreesTest._
 
   "GradientBoostedTreesTest.fit" should "fit perfectly using MultiClassHinge" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassHinge(), 4, 200)(xyFeats)
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassHinge(), lambda0, lambda2, 4, 200)(xyFeats)
 //    println(boostedForest)
     for (d <- data) {
 //      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
@@ -35,14 +36,14 @@ class GradientBoostedTreesTest extends FlatSpec with TestHelpers with Matchers {
   }
 
   it should "fit perfectly using MultiClassSquaredHinge" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassSquaredHinge(), 4, 200)(xyFeats)
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassSquaredHinge(), lambda0, lambda2, 4, 200)(xyFeats)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
   it should "fit perfectly using MultiClassLogLoss" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassLogLoss(), 4, 200)(xyFeats)
+    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassLogLoss(), lambda0, lambda2, 4, 200)(xyFeats)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
