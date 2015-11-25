@@ -26,24 +26,25 @@ object GradientBoostedTreesTest {
 class GradientBoostedTreesTest extends FlatSpec with TestHelpers with Matchers {
   import GradientBoostedTreesTest._
 
-  "GradientBoostedTreesTest.fit" should "fit perfectly using MultiClassHinge" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassHinge(), lambda0, lambda2, 4, 200)(xyFeats)
-//    println(boostedForest)
+  "GradientBoostedTreesTest.fit" should "fit perfectly using MultiClassLogLoss" in {
+    val model = GradientBoostedTrees(outputSpace, xyFeats, MultiClassLogLoss(), lambda0, lambda2, 4)
+    val boostedForest = model.fit(data, 200)
     for (d <- data) {
-//      println(s"predicted: ${boostedForest.predict(d.input)} \t gold: ${d.output} \t scores: ${boostedForest.scores(d.input).toMap}")
+      boostedForest.predict(d.input) should be (d.output)
+    }
+  }
+
+  it should "fit perfectly using MultiClassHinge" in {
+    val model = GradientBoostedTrees(outputSpace, xyFeats, MultiClassHinge(), lambda0, lambda2, 4)
+    val boostedForest = model.fit(data, 200)
+    for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
   it should "fit perfectly using MultiClassSquaredHinge" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassSquaredHinge(), lambda0, lambda2, 4, 200)(xyFeats)
-    for (d <- data) {
-      boostedForest.predict(d.input) should be (d.output)
-    }
-  }
-
-  it should "fit perfectly using MultiClassLogLoss" in {
-    val boostedForest = GradientBoostedTrees.fit(data, outputSpace, MultiClassLogLoss(), lambda0, lambda2, 4, 200)(xyFeats)
+    val model = GradientBoostedTrees(outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
+    val boostedForest = model.fit(data, 200)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }

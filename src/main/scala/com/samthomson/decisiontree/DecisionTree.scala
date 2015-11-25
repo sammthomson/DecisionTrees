@@ -3,6 +3,7 @@ package com.samthomson.decisiontree
 import com.samthomson.LazyStats.weightedMean
 import com.samthomson.Weighted
 import com.samthomson.WeightedMse.{Stats => MseStats}
+import com.samthomson.decisiontree.FeatureSet.Mixed
 import spire.algebra.Field
 import spire.implicits._
 
@@ -59,16 +60,13 @@ object Leaf {
 }
 
 
-object RegressionTree {
-  import FeatureSet.Mixed
+case class RegressionTree[F, X](feats: Mixed[F, X], lambda0: Double) {
   val tolerance = 1e-6
   // prefer evenly weighted splits (for symmetry breaking)
   val evenWeightPreference = 1e-3
 
-  def fit[F, X](data: Iterable[Weighted[Example[X, Double]]],
-                lambda0: Double,
-                maxDepth: Int)
-               (implicit mf: Mixed[F, X]): DecisionTree[X, Double] = {
+  def fit(data: Iterable[Weighted[Example[X, Double]]],
+          maxDepth: Int): DecisionTree[X, Double] = {
     val mseStats = MseStats.of(data.map(_.map(_.output)))  // TODO: cache
     val baseError = mseStats.error
     if (maxDepth <= 1 || data.isEmpty || baseError <= tolerance) {
@@ -81,22 +79,21 @@ object RegressionTree {
       if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
         Leaf.averaging(data)
       } else {
-        val left = fit(leftData, lambda0, maxDepth - 1)
-        val right = fit(rightData, lambda0, maxDepth - 1)
+        val left = fit(leftData, maxDepth - 1)
+        val right = fit(rightData, maxDepth - 1)
         Split(split, left, right)
       }
     }
   }
 
   // finds the split that minimizes squared error
-  private def bestSplitAndError[F, X](examples: Iterable[Weighted[Example[X, Double]]])
-                                     (implicit m: Mixed[F, X]): (Splitter[X], Double) = {
+  private def bestSplitAndError(examples: Iterable[Weighted[Example[X, Double]]]): (Splitter[X], Double) = {
     val am = MseStats.hasAdditiveMonoid[Double]
-    implicit val binary = m.binary
-    implicit val continuous = m.continuous
-    val continuousSplitsAndErrs = m.continuous.feats.toSeq.flatMap(feature => {
+    implicit val binary = feats.binary
+    implicit val continuous = feats.continuous
+    val continuousSplitsAndErrs = feats.continuous.feats.toSeq.flatMap(feature => {
       val statsByThreshold =
-          examples.groupBy(e => m.continuous.get(e.input)(feature))
+          examples.groupBy(e => feats.continuous.get(e.input)(feature))
               .mapValues(exs => MseStats.of(exs.map(_.map(_.output)))).toVector.sortBy(_._1)
       val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold[F, X](feature, v))
       val errors = {
@@ -107,18 +104,20 @@ object RegressionTree {
       }
       splits zip errors
     })
-    val binarySplitsAndErrs = m.binary.feats.toSeq.map(feature => {
-      val stats = examples.groupBy(e => m.binary.get(e.input)(feature))
+    val binarySplitsAndErrs = feats.binary.feats.toSeq.map(feature => {
+      val stats = examples.groupBy(e => feats.binary.get(e.input)(feature))
                     .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
       val l = stats.getOrElse(true, am.zero)
       val r = stats.getOrElse(false, am.zero)
       (BoolSplitter(feature), totalErrAndEvenness(l, r))
     })
-    val (split, (err, _)) = (continuousSplitsAndErrs ++ binarySplitsAndErrs).minBy({ case (s, (er, even)) => er + even })
+    val allSplits = continuousSplitsAndErrs ++ binarySplitsAndErrs
+    val (split, (err, _)) = allSplits.minBy({ case (s, (er, even)) => er + even })
     (split, err)
   }
 
-  def totalErrAndEvenness[X, F](l: MseStats[Double], r: MseStats[Double]): (Double, Double) = {
+  private def totalErrAndEvenness(l: MseStats[Double],
+                                  r: MseStats[Double]): (Double, Double) = {
     (l.error + r.error, evenWeightPreference * math.abs(l.weight - r.weight))
   }
 }

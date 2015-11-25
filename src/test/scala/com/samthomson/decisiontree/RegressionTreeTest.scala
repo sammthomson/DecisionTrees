@@ -1,13 +1,12 @@
 package com.samthomson.decisiontree
 
 import com.samthomson.Weighted
-import com.samthomson.decisiontree.RegressionTree.fit
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, FlatSpec}
 
 object RegressionTreeTest {
   val continuousFeats = Set("a", "b")
-  implicit val abFeats = MixedMap.feats(Set[String](), continuousFeats)
+  val abFeats = MixedMap.feats(Set[String](), continuousFeats)
   private val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
     case ((a, b), y) => Example(MixedMap(Map(), Map("a" -> a, "b" -> b)), y)
   }
@@ -19,11 +18,13 @@ object RegressionTreeTest {
     (( 1.1, 1.0),  4.0)
   ).map(toExample).map(Weighted(_, 1.0))
 }
+
 class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   import RegressionTreeTest._
+  val regressionModel = RegressionTree(abFeats, lambda0)
 
   "RegressionTree.fitRegression" should "fit perfectly given enough depth" in {
-    val tree = fit(data, lambda0, 3)
+    val tree = regressionModel.fit(data, maxDepth = 3)
     tree.depth should be (3)
     for (d <- data) {
       tree.predict(d.input) should be (d.output)
@@ -33,13 +34,13 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
   it should "respect maxDepth" in {
     forAll { (rawData: Vector[(((Double, Double), Double), Double)]) =>
       val data = rawData.map({ case (e, w) => Weighted(toExample(e), math.abs(w)) })
-      val tree = fit(data, lambda0, 2)
+      val tree = regressionModel.fit(data, maxDepth = 2)
       tree.depth should be <= 2
     }
   }
 
   it should "fit approximately given a little depth" in {
-    val tree = fit(data, lambda0, 2)
+    val tree = regressionModel.fit(data, maxDepth = 2)
     for (d <- data) {
       tree.predict(d.input) should be (d.output +- 1.0)
     }
@@ -47,7 +48,7 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
 
   it should "stop when there is 0 error" in {
     val constantData = data.map(_.map(_.copy(output = 2.3)))
-    val tree = fit(constantData, lambda0, 5)
+    val tree = regressionModel.fit(constantData, maxDepth = 5)
     tree.depth should be (1)
     for (d <- constantData) {
       tree.predict(d.input) should be (d.output)
