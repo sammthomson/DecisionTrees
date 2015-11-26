@@ -7,7 +7,7 @@ import com.samthomson.decisiontree.FeatureSet.Mixed
 import spire.algebra.Field
 import spire.implicits._
 
-import scala.math.max
+import scala.math.{abs, max}
 
 
 case class Example[+X, +Y](input: X, output: Y)
@@ -27,7 +27,7 @@ case class BoolSplitter[+F, -X](feature: F)(implicit BF: FeatureSet.Binary[F, X]
 }
 
 
-sealed trait DecisionTree[-X, +Y] {
+sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
   def depth: Int
   def predict(input: X): Y
   def prettyPrint(indent: String = ""): String
@@ -60,13 +60,14 @@ object Leaf {
 }
 
 
-case class RegressionTree[F, X](feats: Mixed[F, X], lambda0: Double) {
+case class RegressionTree[F, X](feats: Mixed[F, X],
+                                lambda0: Double,
+                                maxDepth: Int) {
   val tolerance = 1e-6
   // prefer evenly weighted splits (for symmetry breaking)
   val evenWeightPreference = 1e-3
 
-  def fit(data: Iterable[Weighted[Example[X, Double]]],
-          maxDepth: Int): DecisionTree[X, Double] = {
+  def fit(data: Iterable[Weighted[Example[X, Double]]]): DecisionTree[X, Double] = {
     val mseStats = MseStats.of(data.map(_.map(_.output)))  // TODO: cache
     val baseError = mseStats.error
     if (maxDepth <= 1 || data.isEmpty || baseError <= tolerance) {
@@ -79,8 +80,9 @@ case class RegressionTree[F, X](feats: Mixed[F, X], lambda0: Double) {
       if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
         Leaf.averaging(data)
       } else {
-        val left = fit(leftData, maxDepth - 1)
-        val right = fit(rightData, maxDepth - 1)
+        val shorter: RegressionTree[F, X] = this.copy(maxDepth = maxDepth - 1)
+        val left = shorter.fit(leftData)
+        val right = shorter.fit(rightData)
         Split(split, left, right)
       }
     }
@@ -118,6 +120,6 @@ case class RegressionTree[F, X](feats: Mixed[F, X], lambda0: Double) {
 
   private def totalErrAndEvenness(l: MseStats[Double],
                                   r: MseStats[Double]): (Double, Double) = {
-    (l.error + r.error, evenWeightPreference * math.abs(l.weight - r.weight))
+    (l.error + r.error, evenWeightPreference * abs(l.weight - r.weight))
   }
 }

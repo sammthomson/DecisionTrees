@@ -21,10 +21,10 @@ object RegressionTreeTest {
 
 class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   import RegressionTreeTest._
-  val regressionModel = RegressionTree(abFeats, lambda0)
+  val regressionModel = RegressionTree(abFeats, lambda0, maxDepth = 3)
 
   "RegressionTree.fitRegression" should "fit perfectly given enough depth" in {
-    val tree = regressionModel.fit(data, maxDepth = 3)
+    val tree = regressionModel.fit(data)
     tree.depth should be (3)
     for (d <- data) {
       tree.predict(d.input) should be (d.output)
@@ -34,13 +34,13 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
   it should "respect maxDepth" in {
     forAll { (rawData: Vector[(((Double, Double), Double), Double)]) =>
       val data = rawData.map({ case (e, w) => Weighted(toExample(e), math.abs(w)) })
-      val tree = regressionModel.fit(data, maxDepth = 2)
+      val tree = regressionModel.copy(maxDepth = 2).fit(data)
       tree.depth should be <= 2
     }
   }
 
   it should "fit approximately given a little depth" in {
-    val tree = regressionModel.fit(data, maxDepth = 2)
+    val tree = regressionModel.copy(maxDepth = 2).fit(data)
     for (d <- data) {
       tree.predict(d.input) should be (d.output +- 1.0)
     }
@@ -48,7 +48,7 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
 
   it should "stop when there is 0 error" in {
     val constantData = data.map(_.map(_.copy(output = 2.3)))
-    val tree = regressionModel.fit(constantData, maxDepth = 5)
+    val tree = regressionModel.copy(maxDepth = 5).fit(constantData)
     tree.depth should be (1)
     for (d <- constantData) {
       tree.predict(d.input) should be (d.output)
