@@ -1,7 +1,7 @@
-package com.samthomson.decisiontree
+package com.samthomson.ml.decisiontree
 
-import com.samthomson.Weighted
-import com.samthomson.decisiontree.FeatureSet.OneHot
+import com.samthomson.ml.Weighted
+import com.samthomson.ml.decisiontree.FeatureSet.OneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, FlatSpec}
 
@@ -79,7 +79,6 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
     val splits = RegressionTree(OneHot(feats), lambda0, maxDepth = 1).categoricalSplitsAndErrors(data, feats)
-    println(splits)
     val (bestSplit, _) = splits.minBy(_._2._1)
     val expected = Set("a", "b", "c")
     bestSplit.features.toSet should be (expected)

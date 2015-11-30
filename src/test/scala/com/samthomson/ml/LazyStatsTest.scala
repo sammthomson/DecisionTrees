@@ -1,7 +1,8 @@
-package com.samthomson
+package com.samthomson.ml
 
+import com.samthomson.TestHelpers
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, FlatSpec}
+import org.scalatest.{FlatSpec, Matchers}
 import spire.implicits._
 
 

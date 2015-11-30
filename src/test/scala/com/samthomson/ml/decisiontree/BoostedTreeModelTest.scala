@@ -1,8 +1,8 @@
-package com.samthomson.decisiontree
+package com.samthomson.ml.decisiontree
 
 import com.samthomson.TestHelpers
-import com.samthomson.decisiontree.FeatureSet.Mixed._
-import com.samthomson.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassLogLoss, MultiClassSquaredHinge}
+import com.samthomson.ml.decisiontree.FeatureSet.Mixed._
+import com.samthomson.ml.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassLogLoss, MultiClassSquaredHinge}
 import org.scalatest.{FlatSpec, Matchers}
 
 object BoostedTreeModelTest {

@@ -1,8 +1,6 @@
-package com.samthomson
+package com.samthomson.util
 
 import scala.collection.immutable.Stream
-import scala.language.implicitConversions
-
 
 object StreamFunctions {
   def unfold[A, B](start: A)(step: A => Option[(B, A)]): Stream[B] = {

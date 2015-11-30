@@ -1,7 +1,8 @@
-package com.samthomson.decisiontree
+package com.samthomson.ml.decisiontree
 
-import com.samthomson.StreamFunctions.unfold
-import com.samthomson.Weighted
+import com.samthomson.util.StreamFunctions
+import StreamFunctions.unfold
+import com.samthomson.ml.Weighted
 import spire.implicits._
 
 import scala.language.implicitConversions

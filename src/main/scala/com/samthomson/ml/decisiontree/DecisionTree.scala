@@ -1,9 +1,9 @@
-package com.samthomson.decisiontree
+package com.samthomson.ml.decisiontree
 
-import com.samthomson.LazyStats.weightedMean
-import com.samthomson.Weighted
-import com.samthomson.WeightedMse.{Stats => MseStats}
-import com.samthomson.decisiontree.FeatureSet.{OneHot, Mixed}
+import com.samthomson.ml.LazyStats.weightedMean
+import com.samthomson.ml.Weighted
+import com.samthomson.ml.WeightedMse.{Stats => MseStats}
+import com.samthomson.ml.decisiontree.FeatureSet.Mixed
 import spire.algebra.Field
 import spire.implicits._
 
@@ -144,8 +144,8 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
         .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
         .toVector
         .sortBy(_._2.mean)
-    val splits = stats.map(_._1).scanLeft(Set[F]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
     // TODO: consider non-contiguous splits
+    val splits = stats.map(_._1).scanLeft(Set[F]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
     val errors = {
       val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail
       val rightErrors = stats.map(_._2).scanRight(am.zero)(am.plus).tail

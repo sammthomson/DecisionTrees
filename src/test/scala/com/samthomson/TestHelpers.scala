@@ -14,7 +14,7 @@ trait TestHelpers {
       Spread(pivot, tolerance)
     } else {
       val Seq(min, max) = Seq(1.0 - tolerance, 1.0 + tolerance).map(pivot * _).sorted
-      val radius = (max - min) / 2.0
+      val radius = max / 2.0 - min / 2.0
       val center = min + radius
       Spread(center, radius)
     }

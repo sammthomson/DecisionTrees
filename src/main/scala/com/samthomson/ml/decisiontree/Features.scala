@@ -1,4 +1,4 @@
-package com.samthomson.decisiontree
+package com.samthomson.ml.decisiontree
 
 import scala.language.implicitConversions
 
