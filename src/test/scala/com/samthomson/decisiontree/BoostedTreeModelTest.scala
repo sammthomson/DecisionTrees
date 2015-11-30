@@ -9,7 +9,7 @@ object BoostedTreeModelTest {
   val outputSpace = Set("cat", "dog")
   val xyFeats = {
     val inputFeats = MixedMap.feats(Set("is_animal"), Set("tail_length"))
-    val outputFeats = FeatureSet.oneHot(outputSpace)
+    val outputFeats = FeatureSet.OneHot(outputSpace)
     FeatureSet.Mixed.concat(inputFeats, outputFeats)
   }
   val lambda0 = 0.0 // 1e-7

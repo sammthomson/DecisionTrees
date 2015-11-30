@@ -28,8 +28,6 @@ object FeatureSet {
     FeatureSet[F, Nothing, Any](Set())(f => _ => throw new NoSuchElementException("key not found: " + f))
   }
 
-  def oneHot[F](xs: Set[F]): Binary[F, F] = FeatureSet(xs)(a => b => a == b)
-
   def concat[F1, F2, V, X, Y](implicit FX: FeatureSet[F1, V, X], FY: FeatureSet[F2, V, Y]): FeatureSet[Either[F1, F2], V, (X, Y)] = {
     new FeatureSet[Either[F1, F2], V, (X, Y)] {
       override val feats: Set[Either[F1, F2]] = FX.feats.map(Left(_)) ++ FY.feats.map(Right(_))
@@ -38,6 +36,11 @@ object FeatureSet {
         case ((_, y), Right(f)) => FY.get(y)(f)
       }
     }
+  }
+
+  case class OneHot[F](xs: Set[F]) extends Binary[F, F] {
+    override def feats: Set[F] = xs
+    override def get(x: F)(feat: F): Boolean = feat == x
   }
 
   trait Mixed[F, -X] {

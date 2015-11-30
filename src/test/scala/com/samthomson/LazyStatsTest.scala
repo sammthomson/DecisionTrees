@@ -20,9 +20,10 @@ class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with Generat
   "LazyStats.runningMean" should "be sum / size" in {
     forAll { (head: Double, tail: List[Double]) =>
       val input = head :: tail
-      val mean = LazyStats.runningMean(input)
-      for ((m, i) <- mean.zipWithIndex) {
-        m should be (roughlyEqualTo(input.take(i).sum / math.max(i, 1))(tolerance))
+      val means = LazyStats.runningMean(input)
+      for ((m, i) <- means.zipWithIndex) {
+        val expected = input.take(i).sum / math.max(i, 1)
+        m should be (roughlyEqualTo(expected)(tolerance))
       }
     }
   }

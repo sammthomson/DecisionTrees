@@ -54,4 +54,19 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
       tree.predict(d.input) should be (d.output)
     }
   }
+
+  "categoricalSplitsAndErrors" should "find subsets of features" in {
+    val toExample: (((Boolean, Boolean, Boolean, Boolean), Double)) => Example[MixedMap[String], Double] = {
+      case ((a, b, c, d), y) => Example(MixedMap(Map("a" -> a, "b" -> b, "c" -> c, "d" -> d), Map()), y)
+    }
+    val data = Vector(
+      (( true, false, false, false), -1.0),
+      ((false,  true, false, false),  1.0),
+      ((false, false,  true, false),  4.0),
+      ((false, false, false,  true),  5.0)
+    ).map(toExample).map(Weighted(_, 1.0))
+    val splits = regressionModel.categoricalSplitsAndErrors(data, Set("a", "b", "c", "d"))
+    val (bestSplit, _) = splits.minBy(_._2._1)
+    bestSplit.features.toSet should be (Set("a", "b"))
+  }
 }
