@@ -1,6 +1,7 @@
 package com.samthomson.decisiontree
 
 import com.samthomson.Weighted
+import com.samthomson.decisiontree.FeatureSet.OneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, FlatSpec}
 
@@ -55,18 +56,32 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
     }
   }
 
-  "categoricalSplitsAndErrors" should "find subsets of features" in {
-    val toExample: (((Boolean, Boolean, Boolean, Boolean), Double)) => Example[MixedMap[String], Double] = {
-      case ((a, b, c, d), y) => Example(MixedMap(Map("a" -> a, "b" -> b, "c" -> c, "d" -> d), Map()), y)
-    }
+  "categoricalSplitsAndErrors" should "find subsets of features with equal weights" in {
     val data = Vector(
-      (( true, false, false, false), -1.0),
-      ((false,  true, false, false),  1.0),
-      ((false, false,  true, false),  4.0),
-      ((false, false, false,  true),  5.0)
-    ).map(toExample).map(Weighted(_, 1.0))
-    val splits = regressionModel.categoricalSplitsAndErrors(data, Set("a", "b", "c", "d"))
+      (("a", -1.0), 1.0),
+      (("b",  1.0), 1.0),
+      (("c",  4.0), 1.0),
+      (("d",  5.0), 1.0)
+    ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
+    val feats = Set("a", "b", "c", "d")
+    val splits = RegressionTree(OneHot(feats), lambda0, maxDepth = 1).categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2._1)
-    bestSplit.features.toSet should be (Set("a", "b"))
+    val expected = Set("a", "b")
+    bestSplit.features.toSet should be (expected)
+  }
+
+  it should "find subsets of features with unequal weights" in {
+    val data = Vector(
+      (("a", -1.0), 0.01),
+      (("b",  1.0), 0.01),
+      (("c",  4.0), 100.0),
+      (("d",  5.0), 100.0)
+    ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
+    val feats = Set("a", "b", "c", "d")
+    val splits = RegressionTree(OneHot(feats), lambda0, maxDepth = 1).categoricalSplitsAndErrors(data, feats)
+    println(splits)
+    val (bestSplit, _) = splits.minBy(_._2._1)
+    val expected = Set("a", "b", "c")
+    bestSplit.features.toSet should be (expected)
   }
 }

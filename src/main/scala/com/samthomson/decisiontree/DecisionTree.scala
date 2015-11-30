@@ -145,6 +145,7 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
         .toVector
         .sortBy(_._2.mean)
     val splits = stats.map(_._1).scanLeft(Set[F]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
+    // TODO: consider non-contiguous splits
     val errors = {
       val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail
       val rightErrors = stats.map(_._2).scanRight(am.zero)(am.plus).tail
