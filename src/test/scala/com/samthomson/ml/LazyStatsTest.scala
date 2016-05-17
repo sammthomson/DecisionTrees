@@ -14,7 +14,9 @@ class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with Generat
       val input = head :: tail
       val mean = LazyStats.mean(input)
       val expectedMean = input.sum / input.size
-      mean should be (roughlyEqualTo(expectedMean)(tolerance))
+      whenever (!expectedMean.isInfinite) {
+        mean should be (roughlyEqualTo(expectedMean)(tolerance))
+      }
     }
   }
 
@@ -24,7 +26,9 @@ class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with Generat
       val means = LazyStats.runningMean(input)
       for ((m, i) <- means.zipWithIndex) {
         val expected = input.take(i).sum / math.max(i, 1)
-        m should be (roughlyEqualTo(expected)(tolerance))
+        whenever (!expected.isInfinite) {
+          m should be(roughlyEqualTo(expected)(tolerance))
+        }
       }
     }
   }
