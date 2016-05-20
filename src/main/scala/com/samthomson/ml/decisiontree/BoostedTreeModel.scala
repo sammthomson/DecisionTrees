@@ -5,8 +5,6 @@ import StreamFunctions.unfold
 import com.samthomson.ml.Weighted
 import spire.implicits._
 
-import scala.language.implicitConversions
-
 
 case class BoostedTreeModel[F, X, Y](outputSpace: Iterable[Y],
                                      xyFeats: FeatureSet.Mixed[F, (X, Y)],
@@ -55,7 +53,7 @@ case class BoostedTreeModel[F, X, Y](outputSpace: Iterable[Y],
         }
       }
     val nextTree = regressionModel.fit(residuals)
-    System.err.println(s"loss: $totalLoss")
+//    System.err.println(s"loss: $totalLoss")
     if (nextTree != Leaf(0.0)) {
       Some(nextTree)
     } else {

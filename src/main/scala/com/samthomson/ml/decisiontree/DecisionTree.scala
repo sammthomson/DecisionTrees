@@ -10,10 +10,13 @@ import spire.implicits._
 import scala.math.{abs, max}
 
 
+@SerialVersionUID(1L)
 case class Example[+X, +Y](input: X, output: Y)
 
 
+@SerialVersionUID(1L)
 trait Splitter[-X] extends Function[X, Boolean] {
+
   def isLeft(input: X): Boolean
   // derived:
   def choose[T](input: X)(left: T, right: T): T = if (isLeft(input)) left else right
@@ -33,7 +36,7 @@ case class OrSplitter[+F, -X](features: Iterable[F])(implicit bf: FeatureSet.Bin
   override def toString: String = s"OR(${features.mkString(", ")})"
 }
 
-
+@SerialVersionUID(1L)
 sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
   def depth: Int
   def predict(input: X): Y
@@ -66,7 +69,7 @@ object Leaf {
   }
 }
 
-
+@SerialVersionUID(1L)
 case class RegressionTree[F, X](feats: Mixed[F, X],
                                 lambda0: Double,
                                 maxDepth: Int) {

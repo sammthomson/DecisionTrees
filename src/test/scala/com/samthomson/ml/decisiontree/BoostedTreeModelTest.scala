@@ -1,5 +1,7 @@
 package com.samthomson.ml.decisiontree
 
+import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream, ByteArrayOutputStream}
+
 import com.samthomson.TestHelpers
 import com.samthomson.ml.decisiontree.FeatureSet.Mixed._
 import com.samthomson.ml.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassLogLoss, MultiClassSquaredHinge}
@@ -47,6 +49,21 @@ class BoostedTreeModelTest extends FlatSpec with TestHelpers with Matchers {
     val boostedForest = model.fit(data, 200)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
+    }
+  }
+
+  it should "serialize and deserialize" in {
+    val model = BoostedTreeModel(outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
+    val boostedForest = model.fit(data, 200)
+    val serialized = new ByteArrayOutputStream()
+    new ObjectOutputStream(serialized).writeObject(boostedForest)
+    val deserialized = {
+      new ObjectInputStream(new ByteArrayInputStream(serialized.toByteArray))
+          .readObject().asInstanceOf[MultiClassModel[MixedMap[String], String]]
+    }
+    boostedForest should equal (deserialized)
+    for (d <- data) {
+      boostedForest.predict(d.input) should equal (deserialized.predict(d.input))
     }
   }
 }

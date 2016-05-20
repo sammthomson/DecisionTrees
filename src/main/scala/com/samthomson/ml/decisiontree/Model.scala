@@ -6,6 +6,7 @@ import spire.implicits._
 import scala.language.implicitConversions
 
 
+@SerialVersionUID(1L)
 trait Model[-X, +Y] extends Function[X, Y] {
   def predict(input: X): Y
 

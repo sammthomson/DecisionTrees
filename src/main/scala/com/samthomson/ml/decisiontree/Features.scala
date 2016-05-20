@@ -4,43 +4,44 @@ import scala.language.implicitConversions
 
 
 /**
-  * Evidence that Xs can hold features of type F with value V
-  * @tparam F the type of features
+  * Evidence that `F`s can hold features of type `K` with value `V`
+  * @tparam K the type of features
   * @tparam V the type of feature values
-  * @tparam X the type of objects that map F => V
+  * @tparam F the type of objects that map `K => V`
   */
-trait FeatureSet[F, +V, -X] {
-  def feats: Set[F]
-  def get(x: X)(feat: F): V
+@SerialVersionUID(1L)
+trait FeatureSet[K, +V, -F] extends Serializable {
+  def feats: Set[K]
+  def get(x: F)(feat: K): V
   // derived:
 //  implicit def asFunction(x: X): (F => V) = { f => get(f)(x) }
 }
 object FeatureSet {
-  type Binary[F, -X] = FeatureSet[F, Boolean, X]
-  type Continuous[F, -X] = FeatureSet[F, Double, X]
+  type Binary[K, -F] = FeatureSet[K, Boolean, F]
+  type Continuous[K, -F] = FeatureSet[K, Double, F]
 
-  def apply[F, V, X](fs: Set[F])(implicit g: X => (F => V)): FeatureSet[F, V, X] = new FeatureSet[F, V, X] {
-    override val feats: Set[F] = fs
-    override def get(x: X)(feat: F): V = g(x)(feat)
+  def apply[K, V, F](fs: Set[K])(implicit g: F => (K => V)): FeatureSet[K, V, F] = new FeatureSet[K, V, F] {
+    override val feats: Set[K] = fs
+    override def get(x: F)(feat: K): V = g(x)(feat)
   }
 
-  def empty[F]: FeatureSet[F, Nothing, Any] = {
-    FeatureSet[F, Nothing, Any](Set())(f => _ => throw new NoSuchElementException("key not found: " + f))
+  def empty[K]: FeatureSet[K, Nothing, Any] = {
+    FeatureSet[K, Nothing, Any](Set())(f => _ => throw new NoSuchElementException("key not found: " + f))
   }
 
-  def concat[F1, F2, V, X, Y](implicit FX: FeatureSet[F1, V, X], FY: FeatureSet[F2, V, Y]): FeatureSet[Either[F1, F2], V, (X, Y)] = {
-    new FeatureSet[Either[F1, F2], V, (X, Y)] {
-      override val feats: Set[Either[F1, F2]] = FX.feats.map(Left(_)) ++ FY.feats.map(Right(_))
-      override def get(xy: (X, Y))(feat: Either[F1, F2]) = (xy, feat) match {
+  def concat[K1, K2, V, X, Y](implicit FX: FeatureSet[K1, V, X], FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
+    new FeatureSet[Either[K1, K2], V, (X, Y)] {
+      override val feats: Set[Either[K1, K2]] = FX.feats.map(Left(_)) ++ FY.feats.map(Right(_))
+      override def get(xy: (X, Y))(feat: Either[K1, K2]) = (xy, feat) match {
         case ((x, _), Left(f)) => FX.get(x)(f)
         case ((_, y), Right(f)) => FY.get(y)(f)
       }
     }
   }
 
-  case class OneHot[F](xs: Set[F]) extends Binary[F, F] {
-    override def feats: Set[F] = xs
-    override def get(x: F)(feat: F): Boolean = feat == x
+  case class OneHot[K](xs: Set[K]) extends Binary[K, K] {
+    override def feats: Set[K] = xs
+    override def get(x: K)(feat: K): Boolean = feat == x
   }
 
   trait Mixed[F, -X] {
@@ -65,6 +66,7 @@ object FeatureSet {
   }
 }
 
+@SerialVersionUID(1L)
 case class MixedMap[F](binaryMap: Map[F, Boolean], continuousMap: Map[F, Double])
 
 object MixedMap {
