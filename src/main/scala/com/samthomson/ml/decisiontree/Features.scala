@@ -44,9 +44,9 @@ object FeatureSet {
     override def get(x: K)(feat: K): Boolean = feat == x
   }
 
-  trait Mixed[F, -X] {
-    def binary: Binary[F, X]
-    def continuous: Continuous[F, X]
+  trait Mixed[K, -X] {
+    def binary: Binary[K, X]
+    def continuous: Continuous[K, X]
   }
 
   object Mixed {

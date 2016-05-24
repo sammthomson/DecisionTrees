@@ -7,19 +7,38 @@ import scala.language.implicitConversions
 
 
 @SerialVersionUID(1L)
-trait Model[-X, +Y] extends Function[X, Y] {
+trait Model[-X, +Y] {
   def predict(input: X): Y
 
-  override def apply(x: X): Y = predict(x)
+  def apply(x: X): Y = predict(x)
+}
+object Model {
+  def apply[X, Y](f: X => Y): Model[X, Y] = new Model[X, Y] {
+    override def predict(input: X): Y = f(input)
+  }
 }
 
-/** a model with a fixed finite set of possible outputs */
-case class MultiClassModel[-X, Y](outputSpace: Iterable[Y],
+/**
+  * A model that scores every possible output for an input, then predicts the highest scoring output.
+  * Useful when each input has a tractable (e.g. not exponential) set of possible outputs.
+  */
+case class MultiClassModel[-X, Y](outputSpace: X => Iterable[Y],
                                   scoringModel: Model[(X, Y), Double]) extends Model[X, Y] {
 
-  def scores(input: X): Iterable[(Y, Double)] = outputSpace.map(o => o -> scoringModel.predict((input, o)))
+  def scores(input: X): Iterable[(Y, Double)] = outputSpace(input).map(o => o -> scoringModel.predict((input, o)))
 
   override def predict(input: X): Y = scores(input).maxBy(_._2)._1
+
+  /** Ignores `outputSpace` b/c functions are hard to test for equality */
+  override def equals(that: Any): Boolean =
+    that != null &&
+        canEqual(that) &&
+        that.isInstanceOf[MultiClassModel[X, Y]] &&
+        that.asInstanceOf[MultiClassModel[X, Y]].scoringModel == scoringModel
+}
+object MultiClassModel {
+  def uniform[X, Y](outputSpace: X => Iterable[Y]): MultiClassModel[X, Y] =
+    MultiClassModel(outputSpace, Leaf(0.0))
 }
 
 case class Ensemble[-X, Y: AdditiveMonoid](baseModels: Iterable[Model[X, Y]]) extends Model[X, Y] {

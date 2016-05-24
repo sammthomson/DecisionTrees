@@ -29,32 +29,36 @@ class BoostedTreeModelTest extends FlatSpec with TestHelpers with Matchers {
   import BoostedTreeModelTest._
 
   "GradientBoostedTreesTest.fit" should "fit perfectly using MultiClassLogLoss" in {
-    val model = BoostedTreeModel(outputSpace, xyFeats, MultiClassLogLoss(), lambda0, lambda2, 4)
-    val boostedForest = model.fit(data, 200)
+    val model: BoostedTreeModel[Either[String, String], MixedMap[String], String] =
+      BoostedTreeModel(_ => outputSpace, xyFeats, MultiClassLogLoss(), lambda0, lambda2, 4)
+    val (boostedForest, _) = model.fit(data, 200)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
   it should "fit perfectly using MultiClassHinge" in {
-    val model = BoostedTreeModel(outputSpace, xyFeats, MultiClassHinge(), lambda0, lambda2, 4)
-    val boostedForest = model.fit(data, 200)
+    val model: BoostedTreeModel[Either[String, String], MixedMap[String], String] =
+      BoostedTreeModel(_ => outputSpace, xyFeats, MultiClassHinge(), lambda0, lambda2, 4)
+    val (boostedForest, _) = model.fit(data, 200)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
   it should "fit perfectly using MultiClassSquaredHinge" in {
-    val model = BoostedTreeModel(outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
-    val boostedForest = model.fit(data, 200)
+    val model: BoostedTreeModel[Either[String, String], MixedMap[String], String] =
+      BoostedTreeModel(_ => outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
+    val (boostedForest, _) = model.fit(data, 200)
     for (d <- data) {
       boostedForest.predict(d.input) should be (d.output)
     }
   }
 
   it should "serialize and deserialize" in {
-    val model = BoostedTreeModel(outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
-    val boostedForest = model.fit(data, 200)
+    val model: BoostedTreeModel[Either[String, String], MixedMap[String], String] =
+      BoostedTreeModel(_ => outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
+    val (boostedForest, _) = model.fit(data, 200)
     val serialized = new ByteArrayOutputStream()
     new ObjectOutputStream(serialized).writeObject(boostedForest)
     val deserialized = {

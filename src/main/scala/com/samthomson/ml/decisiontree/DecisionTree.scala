@@ -39,6 +39,7 @@ case class OrSplitter[+F, -X](features: Iterable[F])(implicit bf: FeatureSet.Bin
 @SerialVersionUID(1L)
 sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
   def depth: Int
+  def numNodes: Int
   def predict(input: X): Y
   def prettyPrint(indent: String = ""): String
   override def toString: String = prettyPrint()
@@ -46,7 +47,8 @@ sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
 case class Split[-X, Y](split: Splitter[X],
                         left: DecisionTree[X, Y],
                         right: DecisionTree[X, Y]) extends DecisionTree[X, Y] {
-  override val depth = max(left.depth, right.depth) + 1
+  override lazy val depth = max(left.depth, right.depth) + 1
+  override lazy val numNodes = left.numNodes + right.numNodes + 1
   final override def predict(input: X): Y = split.choose(input)(left, right).predict(input)
   override def prettyPrint(indent: String): String = {
     val indented = indent + "  "
@@ -59,6 +61,7 @@ case class Split[-X, Y](split: Splitter[X],
 }
 case class Leaf[-X, Y](constant: Y) extends DecisionTree[X, Y] {
   override val depth = 1
+  override val numNodes = 1
   final override def predict(input: X): Y = constant
   override def prettyPrint(indent: String): String = indent + s"Leaf($constant)"
 }
@@ -70,7 +73,7 @@ object Leaf {
 }
 
 @SerialVersionUID(1L)
-case class RegressionTree[F, X](feats: Mixed[F, X],
+case class RegressionTree[K, X](feats: Mixed[K, X],
                                 lambda0: Double,
                                 maxDepth: Int) {
   val tolerance = 1e-6
@@ -92,7 +95,7 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
       if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
         Leaf.averaging(data)
       } else {
-        val shorter: RegressionTree[F, X] = this.copy(maxDepth = maxDepth - 1)
+        val shorter: RegressionTree[K, X] = this.copy(maxDepth = maxDepth - 1)
         val left = shorter.fit(leftData)
         val right = shorter.fit(rightData)
         Split(split, left, right)
@@ -107,7 +110,7 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
     (split, err)
   }
 
-  def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(BoolSplitter[F, X], (Double, Double))] = {
+  def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(BoolSplitter[K, X], (Double, Double))] = {
     val binary = feats.binary
     binary.feats.toSeq.map(feature => {
       val stats = examples.groupBy(e => binary.get(e.input)(feature))
@@ -119,7 +122,7 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
     })
   }
 
-  def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(FeatureThreshold[F, X], (Double, Double))] = {
+  def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(FeatureThreshold[K, X], (Double, Double))] = {
     val continuous = feats.continuous
     continuous.feats.toSeq.flatMap(feature => {
       val statsByThreshold =
@@ -127,7 +130,7 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
             .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
             .toVector
             .sortBy(_._1)
-      val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold[F, X](feature, v)(continuous))
+      val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold[K, X](feature, v)(continuous))
       val errors = {
         val stats = statsByThreshold.map(_._2)
         // errors of left and right side of each split value.
@@ -141,14 +144,14 @@ case class RegressionTree[F, X](feats: Mixed[F, X],
   }
 
   def categoricalSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]],
-                                 exclusiveFeats: Set[F]): Seq[(OrSplitter[F, X], (Double, Double))] = {
+                                 exclusiveFeats: Set[K]): Seq[(OrSplitter[K, X], (Double, Double))] = {
     val binary = feats.binary
     val stats = exclusiveFeats
         .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
         .toVector
         .sortBy(_._2.mean)
     // TODO: consider non-contiguous splits
-    val splits = stats.map(_._1).scanLeft(Set[F]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
+    val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
     val errors = {
       val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail
       val rightErrors = stats.map(_._2).scanRight(am.zero)(am.plus).tail
