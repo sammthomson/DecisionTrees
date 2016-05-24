@@ -4,7 +4,7 @@ version := "0.1-SNAPSHOT"
 
 organization := "com.samthomson"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 libraryDependencies ++= Seq(
   "org.spire-math" %% "spire" % "0.11.0",
