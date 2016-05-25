@@ -17,11 +17,11 @@ object BoostedTreeModelTest {
   val lambda0 = 0.0 // 1e-7
   val lambda2 = 1.0
   val data: Vector[Example[MixedMap[String], String]] = Vector(
-    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" -> -1.0)), "dog"),
-    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  0.0)),  "cat"),
-    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.0)),  "dog"),
-    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.1)),  "dog"),
-    Example(MixedMap(Map("is_animal" -> true), Map("tail_length" ->  1.2)),  "cat")
+    Example(MixedMap(Set("is_animal"), Map("tail_length" -> -1.0)), "dog"),
+    Example(MixedMap(Set("is_animal"), Map("tail_length" ->  0.0)),  "cat"),
+    Example(MixedMap(Set("is_animal"), Map("tail_length" ->  1.0)),  "dog"),
+    Example(MixedMap(Set("is_animal"), Map("tail_length" ->  1.1)),  "dog"),
+    Example(MixedMap(Set("is_animal"), Map("tail_length" ->  1.2)),  "cat")
   )
 }
 

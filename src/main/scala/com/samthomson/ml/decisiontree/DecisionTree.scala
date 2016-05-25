@@ -111,20 +111,17 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
   }
 
   def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(BoolSplitter[K, X], (Double, Double))] = {
+    def stats(xs: Iterable[Weighted[Example[X, Double]]]): MseStats[Double] = MseStats.of(xs.map(_.map(_.output)))
     val binary = feats.binary
-    binary.feats.toSeq.map(feature => {
-      val stats = examples.groupBy(e => binary.get(e.input)(feature))
-          .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
-          .withDefaultValue(am.zero)
-      val l = stats(true)
-      val r = stats(false)
-      (BoolSplitter(feature)(binary), totalErrAndEvenness(l, r))
-    })
+    binary.feats.toSeq.par.map(feature => {
+      val (l, r) = examples.partition(e => binary.get(e.input)(feature))
+      (BoolSplitter(feature)(binary), totalErrAndEvenness(stats(l), stats(r)))
+    }).seq
   }
 
   def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(FeatureThreshold[K, X], (Double, Double))] = {
     val continuous = feats.continuous
-    continuous.feats.toSeq.flatMap(feature => {
+    continuous.feats.toSeq.par.flatMap(feature => {
       val statsByThreshold =
         examples.groupBy(e => continuous.get(e.input)(feature))
             .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
@@ -140,13 +137,13 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
         (leftErrors zip rightErrors).map { case (l, r) => totalErrAndEvenness(l, r) }
       }
       splits zip errors
-    })
+    }).seq
   }
 
   def categoricalSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]],
                                  exclusiveFeats: Set[K]): Seq[(OrSplitter[K, X], (Double, Double))] = {
     val binary = feats.binary
-    val stats = exclusiveFeats
+    val stats = exclusiveFeats.par
         .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
         .toVector
         .sortBy(_._2.mean)

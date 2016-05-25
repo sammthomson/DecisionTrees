@@ -5,6 +5,7 @@ import scala.language.implicitConversions
 
 /**
   * Evidence that `F`s can hold features of type `K` with value `V`
+ *
   * @tparam K the type of features
   * @tparam V the type of feature values
   * @tparam F the type of objects that map `K => V`
@@ -67,14 +68,14 @@ object FeatureSet {
 }
 
 @SerialVersionUID(1L)
-case class MixedMap[F](binaryMap: Map[F, Boolean], continuousMap: Map[F, Double])
+case class MixedMap[F](binarySet: Set[F], continuousMap: Map[F, Double])
 
 object MixedMap {
   def concat[F](a: MixedMap[F], b: MixedMap[F]): MixedMap[F] = {
-    MixedMap(a.binaryMap ++ b.binaryMap, a.continuousMap ++ b.continuousMap)
+    MixedMap(a.binarySet ++ b.binarySet, a.continuousMap ++ b.continuousMap)
   }
   def feats[F](binaryFeats: Set[F], continuousFeats: Set[F]): FeatureSet.Mixed[F, MixedMap[F]] = FeatureSet.Mixed(
-    FeatureSet(binaryFeats)(mm => f => mm.binaryMap.getOrElse(f, false)),
+    FeatureSet(binaryFeats)(mm => f => mm.binarySet.contains(f)),
     FeatureSet(continuousFeats)(mm => f => mm.continuousMap.getOrElse(f, 0.0))
   )
 }

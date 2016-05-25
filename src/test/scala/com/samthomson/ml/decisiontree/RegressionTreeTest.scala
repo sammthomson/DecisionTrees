@@ -9,7 +9,7 @@ object RegressionTreeTest {
   val continuousFeats = Set("a", "b")
   val abFeats = MixedMap.feats(Set[String](), continuousFeats)
   private val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
-    case ((a, b), y) => Example(MixedMap(Map(), Map("a" -> a, "b" -> b)), y)
+    case ((a, b), y) => Example(MixedMap(Set(), Map("a" -> a, "b" -> b)), y)
   }
   val lambda0 = 0.1
   val data = Vector(
