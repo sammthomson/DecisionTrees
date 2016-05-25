@@ -23,18 +23,17 @@ object Model {
   * Useful when each input has a tractable (e.g. not exponential) set of possible outputs.
   */
 case class MultiClassModel[-X, Y](outputSpace: X => Iterable[Y],
-                                  scoringModel: Model[(X, Y), Double]) extends Model[X, Y] {
+                                  scoringModel: Model[(X, Y), Double]) extends Model[X, Y] with Equals {
 
   def scores(input: X): Iterable[(Y, Double)] = outputSpace(input).map(o => o -> scoringModel.predict((input, o)))
 
   override def predict(input: X): Y = scores(input).maxBy(_._2)._1
 
   /** Ignores `outputSpace` b/c functions are hard to test for equality */
-  override def equals(that: Any): Boolean =
-    that != null &&
-        canEqual(that) &&
-        that.isInstanceOf[MultiClassModel[X, Y]] &&
-        that.asInstanceOf[MultiClassModel[X, Y]].scoringModel == scoringModel
+  override def equals(other: Any): Boolean = other match {
+    case that: MultiClassModel[X, Y] => (that canEqual this) && that.scoringModel == scoringModel
+    case _ => false
+  }
 }
 object MultiClassModel {
   def uniform[X, Y](outputSpace: X => Iterable[Y]): MultiClassModel[X, Y] =
