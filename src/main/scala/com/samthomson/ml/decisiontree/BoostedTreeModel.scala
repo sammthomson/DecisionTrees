@@ -14,19 +14,20 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
                                      maxDepth: Int) extends LazyLogging {
   private val regression = RegressionTree(xyFeats, lambda0, maxDepth)
 
-  private def toModel(forest: List[Model[(X, Y), Double]]) = MultiClassModel[X, Y](outputSpace, Ensemble(forest))
+  private def toModel(forest: Vector[Model[(X, Y), Double]]) = MultiClassModel[X, Y](outputSpace, Ensemble(forest))
 
   def fit(data: Iterable[Example[X, Y]],
           numIterations: Int): (MultiClassModel[X, Y], Double) =
-    optimizationPath(data)(Ensemble(List[Model[(X, Y), Double]]())).take(numIterations).last
+    optimizationPath(data)(Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
 
   def optimizationPath(data: Iterable[Example[X, Y]])
                       (initialModel: Model[(X, Y), Double]): Stream[(MultiClassModel[X, Y], Double)] = {
-    unfold(List(initialModel))({ forest =>
+    unfold(Vector(initialModel))({ forest =>
       val (oTree, loss) = fitNextTree(data, toModel(forest))
       oTree.map({ tree =>
         // yield the new tree, and update the "unfold" state to include the new tree
-        ((toModel(tree :: forest), loss), tree :: forest)
+        val newForest = forest :+ tree
+        ((toModel(newForest), loss), newForest)
       })
     })
   }
