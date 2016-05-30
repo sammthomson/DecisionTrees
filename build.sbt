@@ -2,7 +2,7 @@ name := "DecisionTrees"
 
 version := "0.1-SNAPSHOT"
 
-organization := "com.samthomson"
+organization := "org.samthomson"
 
 scalaVersion := "2.11.8"
 

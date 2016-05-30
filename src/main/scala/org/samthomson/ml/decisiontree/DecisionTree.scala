@@ -1,9 +1,9 @@
-package com.samthomson.ml.decisiontree
+package org.samthomson.ml.decisiontree
 
-import com.samthomson.ml.LazyStats.weightedMean
-import com.samthomson.ml.Weighted
-import com.samthomson.ml.WeightedMse.{Stats => MseStats}
-import com.samthomson.ml.decisiontree.FeatureSet.Mixed
+import org.samthomson.ml.LazyStats.weightedMean
+import org.samthomson.ml.Weighted
+import org.samthomson.ml.WeightedMse.{Stats => MseStats}
+import org.samthomson.ml.decisiontree.FeatureSet.Mixed
 import spire.algebra.Field
 import spire.implicits._
 

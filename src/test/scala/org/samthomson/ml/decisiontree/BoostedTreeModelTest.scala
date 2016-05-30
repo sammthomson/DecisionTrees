@@ -1,10 +1,10 @@
-package com.samthomson.ml.decisiontree
+package org.samthomson.ml.decisiontree
 
 import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream, ByteArrayOutputStream}
 
-import com.samthomson.TestHelpers
-import com.samthomson.ml.decisiontree.FeatureSet.Mixed._
-import com.samthomson.ml.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassLogLoss, MultiClassSquaredHinge}
+import org.samthomson.TestHelpers
+import org.samthomson.ml.decisiontree.FeatureSet.Mixed._
+import org.samthomson.ml.decisiontree.TwiceDiffableLoss.{MultiClassHinge, MultiClassLogLoss, MultiClassSquaredHinge}
 import org.scalatest.{FlatSpec, Matchers}
 
 object BoostedTreeModelTest {

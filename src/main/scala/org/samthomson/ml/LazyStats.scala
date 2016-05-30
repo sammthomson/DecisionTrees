@@ -1,4 +1,4 @@
-package com.samthomson.ml
+package org.samthomson.ml
 
 import spire.algebra.{AdditiveMonoid, Field}
 import spire.implicits._

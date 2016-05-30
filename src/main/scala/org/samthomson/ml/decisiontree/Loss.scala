@@ -1,4 +1,4 @@
-package com.samthomson.ml.decisiontree
+package org.samthomson.ml.decisiontree
 
 import scala.math.{exp, log}
 

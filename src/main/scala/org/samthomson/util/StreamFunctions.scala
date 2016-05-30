@@ -1,4 +1,4 @@
-package com.samthomson.util
+package org.samthomson.util
 
 import scala.collection.immutable.Stream
 

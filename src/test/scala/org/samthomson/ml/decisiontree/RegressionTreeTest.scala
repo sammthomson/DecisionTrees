@@ -1,7 +1,7 @@
-package com.samthomson.ml.decisiontree
+package org.samthomson.ml.decisiontree
 
-import com.samthomson.ml.Weighted
-import com.samthomson.ml.decisiontree.FeatureSet.OneHot
+import org.samthomson.ml.Weighted
+import org.samthomson.ml.decisiontree.FeatureSet.OneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, FlatSpec}
 

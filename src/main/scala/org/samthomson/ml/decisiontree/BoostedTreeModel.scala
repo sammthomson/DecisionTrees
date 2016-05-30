@@ -1,7 +1,7 @@
-package com.samthomson.ml.decisiontree
+package org.samthomson.ml.decisiontree
 
-import com.samthomson.ml.Weighted
-import com.samthomson.util.StreamFunctions.unfold
+import org.samthomson.ml.Weighted
+import org.samthomson.util.StreamFunctions.unfold
 import com.typesafe.scalalogging.LazyLogging
 import spire.implicits._
 

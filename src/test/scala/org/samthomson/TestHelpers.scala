@@ -1,4 +1,4 @@
-package com.samthomson
+package org.samthomson
 
 import org.scalactic.TripleEqualsSupport.Spread
 
