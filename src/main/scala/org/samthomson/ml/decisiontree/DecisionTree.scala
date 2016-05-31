@@ -1,5 +1,6 @@
 package org.samthomson.ml.decisiontree
 
+import com.typesafe.scalalogging.LazyLogging
 import org.samthomson.ml.LazyStats.weightedMean
 import org.samthomson.ml.Weighted
 import org.samthomson.ml.WeightedMse.{Stats => MseStats}
@@ -75,7 +76,7 @@ object Leaf {
 @SerialVersionUID(1L)
 case class RegressionTree[K, X](feats: Mixed[K, X],
                                 lambda0: Double,
-                                maxDepth: Int) {
+                                maxDepth: Int) extends LazyLogging {
   val tolerance = 1e-6
   // prefer evenly weighted splits (for symmetry breaking)
   val evenWeightPreference = 1e-3
@@ -83,6 +84,7 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
   private val am = MseStats.hasAdditiveMonoid[Double]
 
   def fit(data: Iterable[Weighted[Example[X, Double]]]): DecisionTree[X, Double] = {
+    logger.debug("fitting regression tree, depth: " + maxDepth)
     val mseStats = MseStats.of(data.map(_.map(_.output)))  // TODO: cache
     val baseError = mseStats.error
     if (maxDepth <= 1 || data.isEmpty || baseError <= tolerance) {
@@ -90,7 +92,7 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
     } else {
       val (split, error) = bestSplitAndError(data)
       val (leftData, rightData) = data.partition(e => split(e.input))
-      // TODO: Better to prune afterwards than to stop early. Sometimes you need to make splits
+      // TODO: Better to prune afterwards than to stop early? Sometimes you need to make splits
       // that don't improve in order to make later splits that do improve.
       if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
         Leaf.averaging(data)
@@ -106,7 +108,10 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
   // finds the split that minimizes squared error
   def bestSplitAndError(examples: Iterable[Weighted[Example[X, Double]]]): (Splitter[X], Double) = {
     val allSplits = continuousSplitsAndErrors(examples) ++ binarySplitsAndErrors(examples)
-    val (split, (err, _)) = allSplits.minBy({ case (s, (er, even)) => er + evenWeightPreference * even })
+    val (split, (err, _)) = allSplits.minBy({ case (s, (er, even)) =>
+//      logger.debug(f"split: $s%15s, error: $er%15.5f")
+      er + evenWeightPreference * even
+    })
     (split, err)
   }
 
@@ -147,7 +152,7 @@ case class RegressionTree[K, X](feats: Mixed[K, X],
         .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
         .toVector
         .sortBy(_._2.mean)
-    // TODO: consider non-contiguous splits
+    // TODO: consider non-contiguous splits?
     val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
     val errors = {
       val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail

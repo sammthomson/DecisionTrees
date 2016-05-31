@@ -1,8 +1,9 @@
 package org.samthomson.ml.decisiontree
 
-import org.samthomson.ml.Weighted
-import org.samthomson.util.StreamFunctions.unfold
 import com.typesafe.scalalogging.LazyLogging
+import org.samthomson.ml.Weighted
+import org.samthomson.ml.WeightedMean.{Stats => MeanStats}
+import org.samthomson.util.StreamFunctions.unfold
 import spire.implicits._
 
 
@@ -34,34 +35,37 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
 
   def fitNextTree(data: Iterable[Example[X, Y]],
                   currentModel: MultiClassModel[X, Y]): (Option[DecisionTree[(X, Y), Double]], Double) = {
-    var totalLoss = 0.0  // keep track of objective value (loss)
+    var totalLoss = MeanStats(0.0, 0.0)  // keep track of objective value (loss)
+    var n = 0  // number of examples
     // Calculate a 2nd-order Taylor expansion of loss w.r.t. scores, then
     // do the old AdaBoost thing where you turn the quadratic fns into a weighted
     // regression problem.
+    logger.debug("calculating residuals")
     val residuals = data.flatMap { case Example(input, goldLabel) =>
-        // our forest-so-far produces a score (real number) for each (input, output) pair.
-        val scores = currentModel.scores(input).toMap
-        // calculate loss and its first two derivatives with respect to scores.
-        // hessian is actually a diagonal approximation (i.e. ignores interactions btwn scores).
-        val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores)
-        totalLoss += loss
-        gradient.map { case (y, grad) =>
-          val hess = hessian(y) + lambda2
-          // newLoss ~= w * (.5 * hess * theta^2 + grad * theta + oldLoss)    // 2nd-order Taylor approx
-          //          = .5 * w * hess * (-grad/hess - theta)^2 + Constant
-          //          = weighted squared error of theta w.r.t. -grad / hess
-          val argmin = -grad / hess
-          val weight = .5 * hess
-          Weighted(Example((input, y), argmin), weight)
-        }
+      // our forest-so-far produces a score (real number) for each (input, output) pair.
+      val scores = currentModel.scores(input).toMap
+      // calculate loss and its first two derivatives with respect to scores.
+      // hessian is actually a diagonal approximation (i.e. ignores interactions btwn scores).
+      val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores)
+      totalLoss += MeanStats(1.0, loss)
+      n += 1
+      gradient.map { case (y, grad) =>
+        val hess = hessian(y) + lambda2
+        // newLoss ~= w * (.5 * hess * theta^2 + grad * theta + oldLoss)    // 2nd-order Taylor approx
+        //          = .5 * w * hess * (-grad/hess - theta)^2 + Constant
+        //          = weighted squared error of theta w.r.t. -grad / hess
+        val argmin = -grad / hess
+        val weight = .5 * hess
+        Weighted(Example((input, y), argmin), weight)
       }
+    }
     val nextTree = regression.fit(residuals)
-//    logger.info(s"loss: $totalLoss")
+    logger.debug(f"loss: ${totalLoss.mean}%10.5f")
     if (nextTree != Leaf(0.0)) {
-      (Some(nextTree), totalLoss)
+      (Some(nextTree), totalLoss.mean)
     } else {
-      logger.info("Empty tree. Stopping.")
-      (None, totalLoss)
+      logger.debug("Empty tree. Stopping.")
+      (None, totalLoss.mean)
     }
   }
 }

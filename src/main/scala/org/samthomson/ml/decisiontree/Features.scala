@@ -4,7 +4,7 @@ import scala.language.implicitConversions
 
 
 /**
-  * Evidence that `F`s can hold features of type `K` with value `V`
+  * Evidence that `F`s hold features of type `K` with values of type `V`.
  *
   * @tparam K the type of features
   * @tparam V the type of feature values
@@ -30,7 +30,9 @@ object FeatureSet {
     FeatureSet[K, Nothing, Any](Set())(f => _ => throw new NoSuchElementException("key not found: " + f))
   }
 
-  def concat[K1, K2, V, X, Y](implicit FX: FeatureSet[K1, V, X], FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
+  def concat[K1, K2, V, X, Y](implicit
+                              FX: FeatureSet[K1, V, X],
+                              FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
     new FeatureSet[Either[K1, K2], V, (X, Y)] {
       override val feats: Set[Either[K1, K2]] = FX.feats.map(Left(_)) ++ FY.feats.map(Right(_))
       override def get(xy: (X, Y))(feat: Either[K1, K2]) = (xy, feat) match {

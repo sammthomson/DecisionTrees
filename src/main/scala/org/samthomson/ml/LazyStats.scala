@@ -27,7 +27,7 @@ object WeightedMean {
       xs.toIterator.map(wx => of(wx)).foldLeft(am.zero)(am.plus)
     }
 
-    def hasAdditiveMonoid[N](implicit f: Field[N]): AdditiveMonoid[Stats[N]] = new AdditiveMonoid[Stats[N]] {
+    implicit def hasAdditiveMonoid[N](implicit f: Field[N]): AdditiveMonoid[Stats[N]] = new AdditiveMonoid[Stats[N]] {
       override def zero: Stats[N] = Stats(0.0, f.zero)
       override def plus(a: Stats[N], b: Stats[N]): Stats[N] = {
         if (a.weight == 0.0) b else if (b.weight == 0.0) a else {
@@ -57,7 +57,7 @@ object WeightedMse {
       examples.toIterator.map(wx => Stats.of(wx)).foldLeft(am.zero)(am.plus)
     }
 
-    def hasAdditiveMonoid[N](implicit f: Field[N]): AdditiveMonoid[Stats[N]] = new AdditiveMonoid[Stats[N]] {
+    implicit def hasAdditiveMonoid[N](implicit f: Field[N]): AdditiveMonoid[Stats[N]] = new AdditiveMonoid[Stats[N]] {
       override val zero: Stats[N] = Stats(0.0, f.zero, f.zero)
       override def plus(a: Stats[N], b: Stats[N]): Stats[N] = {
         val newWeight = a.weight + b.weight
