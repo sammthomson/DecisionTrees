@@ -61,11 +61,12 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
     }
     val nextTree = regression.fit(residuals)
     logger.debug(f"loss: ${totalLoss.mean}%10.5f")
-    if (nextTree != Leaf(0.0)) {
-      (Some(nextTree), totalLoss.mean)
-    } else {
-      logger.debug("Empty tree. Stopping.")
-      (None, totalLoss.mean)
+    nextTree match {
+      case Leaf(avg) if math.abs(avg) <= lambda0 =>
+        // don't waste my time with these mickey mouse trees
+        logger.debug("Empty tree. Stopping.")
+        (None, totalLoss.mean)
+      case _ => (Some(nextTree), totalLoss.mean)
     }
   }
 }
