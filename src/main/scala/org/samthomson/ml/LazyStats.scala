@@ -18,7 +18,7 @@ object WeightedMean {
   def of[N: Field](xs: TraversableOnce[Weighted[N]]): N = Stats.of(xs).mean
 
   // sufficient statistic for calculating online mean
-  case class Stats[N] private (weight: Double, mean: N)
+  case class Stats[N](weight: Double, mean: N)
 
   object Stats {
     def of[N: Field](x: Weighted[N]): Stats[N] = Stats(x.weight, x.unweighted)
