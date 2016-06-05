@@ -55,7 +55,7 @@ class BoostedTreeModelTest extends FlatSpec with TestHelpers with Matchers {
     }
   }
 
-  it should "serialize and deserialize" in {
+  it should "serialize and deserialize to/from object stream" in {
     val model: BoostedTreeModel[Either[String, String], MixedMap[String], String] =
       BoostedTreeModel(_ => outputSpace, xyFeats, MultiClassSquaredHinge(), lambda0, lambda2, 4)
     val (boostedForest, _) = model.fit(data, 200)

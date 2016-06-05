@@ -41,6 +41,6 @@ object MultiClassModel {
 }
 
 @SerialVersionUID(1L)
-case class Ensemble[-X, Y: AdditiveMonoid](baseModels: Vector[Model[X, Y]]) extends Model[X, Y] {
+case class Ensemble[-X, +Y: AdditiveMonoid](baseModels: Vector[Model[X, Y]]) extends Model[X, Y] {
   override def predict(input: X): Y = baseModels.map(_.predict(input)).qsum
 }

@@ -15,22 +15,24 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
                                      maxDepth: Int) extends LazyLogging {
   private val regression = RegressionTree(xyFeats, lambda0, maxDepth)
 
-  private def toModel(forest: Vector[Model[(X, Y), Double]]) = MultiClassModel[X, Y](outputSpace, Ensemble(forest))
+  def toModel(forest: Vector[Model[(X, Y), Double]]) = MultiClassModel[X, Y](outputSpace, Ensemble(forest))
 
   def fit(data: Iterable[Example[X, Y]],
-          numIterations: Int): (MultiClassModel[X, Y], Double) =
-    optimizationPath(data)(Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
+          numIterations: Int): (MultiClassModel[X, Y], Double) = {
+    val (lastModel, lastScore) = optimizationPath(data)(Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
+    (MultiClassModel(outputSpace, lastModel), lastScore)
+  }
 
   def optimizationPath(data: Iterable[Example[X, Y]])
-                      (initialModel: Model[(X, Y), Double]): Stream[(MultiClassModel[X, Y], Double)] = {
-    unfold(Vector(initialModel))({ forest =>
+                      (initialModel: Model[(X, Y), Double]): Stream[(Ensemble[(X, Y), Double], Double)] = {
+    unfold (Vector(initialModel)) { forest =>
       val (oTree, loss) = fitNextTree(data, toModel(forest))
       oTree.map({ tree =>
         // yield the new tree, and update the "unfold" state to include the new tree
         val newForest = forest :+ tree
-        ((toModel(newForest), loss), newForest)
+        ((Ensemble(newForest), loss), newForest)
       })
-    })
+    }
   }
 
   def fitNextTree(data: Iterable[Example[X, Y]],
