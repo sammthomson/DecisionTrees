@@ -26,10 +26,10 @@ sealed trait Splitter[-X] extends Function[X, Boolean] {
   def apply(input: X): Boolean = isLeft(input)
 }
 object Splitter {
-
   // JSON codec
-  implicit def encoder[X]: Encoder[Splitter[X]] = new Encoder[Splitter[X]] {
-    override def apply(a: Splitter[X]): Json = a match {
+  implicit def encoder[X]: Encoder[Splitter[X]] = Encoder.instance {
+      // TODO: feature type `F` isn't visible, so we just call toString on feats.
+      // works for most basic feature types, but it's pretty hacky.
       case FeatureThreshold(f, t) => Json.obj(
         "feature" -> Json.fromString(f.toString),
         "threshold" -> Json.fromDoubleOrString(t)
@@ -37,17 +37,16 @@ object Splitter {
       case BoolSplitter(f) => Json.obj("feature" -> Json.fromString(f.toString))
       case OrSplitter(fs) => Json.obj("features" -> fs.map(_.toString).asJson)
     }
-  }
-  implicit def decoder[F, X](implicit bf: FeatureSet.Mixed[F, X],
+  implicit def decoder[F, X](implicit feats: FeatureSet.Mixed[F, X],
                              fDec: Decoder[F]): Decoder[Splitter[X]] = {
     val threshDec: Decoder[Splitter[X]] = Decoder.instance { cursor =>
       for (
         feature <- cursor.get[F]("feature");
         threshold <- cursor.get[Double]("threshold")
-      ) yield FeatureThreshold[F, X](feature, threshold)(bf.continuous)
+      ) yield FeatureThreshold[F, X](feature, threshold)(feats.continuous)
     }
-    val orDec: Decoder[Splitter[X]] = Decoder.instance(_.get[Iterable[F]]("features").map(OrSplitter(_)(bf.binary)))
-    val boolDec: Decoder[Splitter[X]] = Decoder.instance(_.get[F]("feature").map(BoolSplitter(_)(bf.binary)))
+    val orDec: Decoder[Splitter[X]] = Decoder.instance(_.get[Iterable[F]]("features").map(OrSplitter(_)(feats.binary)))
+    val boolDec: Decoder[Splitter[X]] = Decoder.instance(_.get[F]("feature").map(BoolSplitter(_)(feats.binary)))
     threshDec or orDec or boolDec
   }
 }
@@ -68,6 +67,7 @@ case class OrSplitter[+F, -X](features: Iterable[F])
   override def toString: String = s"or(${features.mkString(", ")})"
 }
 
+
 @SerialVersionUID(1L)
 sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
   def depth: Int
@@ -77,8 +77,12 @@ sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {
   override def toString: String = prettyPrint()
 }
 object DecisionTree {
-  implicit def encoder[X, Y: Encoder]: Encoder[DecisionTree[X, Y]] = new Encoder[DecisionTree[X, Y]] {
-    override def apply(a: DecisionTree[X, Y]): Json = a match {
+  def fromJson[X, Y](json: String)
+                    (implicit yDec: Decoder[Y],
+                     sDec: Decoder[Splitter[X]]): DecisionTree[X, Y] =
+    jawn.decode[DecisionTree[X, Y]](json).valueOr(throw _)
+  // JSON codec
+  implicit def encoder[X, Y: Encoder]: Encoder[DecisionTree[X, Y]] = Encoder.instance {
       case Leaf(y) => y.asJson
       case Split(splitter, left, right) => Json.obj(
         "split" -> splitter.asJson,
@@ -86,7 +90,6 @@ object DecisionTree {
         "right" -> right.asJson
       )
     }
-  }
   implicit def decoder[X, Y](implicit
                              yDec: Decoder[Y],
                              sDec: Decoder[Splitter[X]]): Decoder[DecisionTree[X, Y]] = {

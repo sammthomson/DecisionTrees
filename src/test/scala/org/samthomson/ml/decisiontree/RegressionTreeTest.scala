@@ -1,9 +1,10 @@
 package org.samthomson.ml.decisiontree
 
+import io.circe.syntax._
 import org.samthomson.ml.Weighted
 import org.samthomson.ml.decisiontree.FeatureSet.OneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, FlatSpec}
+import org.scalatest.{FlatSpec, Matchers}
 
 object RegressionTreeTest {
   val continuousFeats = Set("a", "b")
@@ -64,7 +65,8 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
       (("d",  5.0), 1.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val splits = RegressionTree(OneHot(feats), lambda0, maxDepth = 1).categoricalSplitsAndErrors(data, feats)
+    val model = RegressionTree(OneHot(feats), lambda0, maxDepth = 1)
+    val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2._1)
     val expected = Set("a", "b")
     bestSplit.features.toSet should be (expected)
@@ -78,9 +80,18 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
       (("d",  5.0), 100.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val splits = RegressionTree(OneHot(feats), lambda0, maxDepth = 1).categoricalSplitsAndErrors(data, feats)
+    val model = RegressionTree(OneHot(feats), lambda0, maxDepth = 1)
+    val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2._1)
     val expected = Set("a", "b", "c")
     bestSplit.features.toSet should be (expected)
+  }
+
+  it should "serialize and deserialize to/from json" in {
+    val tree = regressionModel.fit(data)
+    val serialized = tree.asJson.noSpaces
+    implicit val fs = abFeats
+    val deserialized = DecisionTree.fromJson[MixedMap[String], Double](serialized)
+    deserialized should equal (tree)
   }
 }
