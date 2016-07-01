@@ -6,7 +6,7 @@ import org.samthomson.ml.decisiontree.FeatureSet.OneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 
-object RegressionTreeTest {
+object RegressionTreeModelTest {
   val continuousFeats = Set("a", "b")
   val abFeats = MixedMap.feats(Set[String](), continuousFeats)
   private val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
@@ -21,40 +21,45 @@ object RegressionTreeTest {
   ).map(toExample).map(Weighted(_, 1.0))
 }
 
-class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
-  import RegressionTreeTest._
-  val regressionModel = RegressionTree(abFeats, lambda0, maxDepth = 3)
+class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
+  import RegressionTreeModelTest._
+  val regressionModel = RegressionTreeModel(abFeats, lambda0, maxDepth = 3)
 
   "RegressionTree.fitRegression" should "fit perfectly given enough depth" in {
-    val tree = regressionModel.fit(data)
-    tree.depth should be (3)
+    val (tree, loss) = regressionModel.fit(data)
+    tree.depth should equal (3)
     for (d <- data) {
-      tree.predict(d.input) should be (d.output)
+      tree.predict(d.input) should equal (d.output)
     }
+    loss should be <= 0.0
   }
 
   it should "respect maxDepth" in {
     forAll { (rawData: Vector[(((Double, Double), Double), Double)]) =>
       val data = rawData.map({ case (e, w) => Weighted(toExample(e), math.abs(w)) })
-      val tree = regressionModel.copy(maxDepth = 2).fit(data)
+      val (tree, _) = regressionModel.copy(maxDepth = 2).fit(data)
       tree.depth should be <= 2
     }
   }
 
   it should "fit approximately given a little depth" in {
-    val tree = regressionModel.copy(maxDepth = 2).fit(data)
+    val (tree, loss) = regressionModel.copy(maxDepth = 2).fit(data)
     for (d <- data) {
       tree.predict(d.input) should be (d.output +- 1.0)
     }
+    loss should be <= 2.5
+
   }
 
   it should "stop when there is 0 error" in {
     val constantData = data.map(_.map(_.copy(output = 2.3)))
-    val tree = regressionModel.copy(maxDepth = 5).fit(constantData)
+    val (tree, loss) = regressionModel.copy(maxDepth = 5).fit(constantData)
     tree.depth should be (1)
     for (d <- constantData) {
       tree.predict(d.input) should be (d.output)
     }
+    loss should be <= 0.0
+
   }
 
   "categoricalSplitsAndErrors" should "find subsets of features with equal weights" in {
@@ -65,7 +70,7 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
       (("d",  5.0), 1.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val model = RegressionTree(OneHot(feats), lambda0, maxDepth = 1)
+    val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2._1)
     val expected = Set("a", "b")
@@ -80,7 +85,7 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
       (("d",  5.0), 100.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val model = RegressionTree(OneHot(feats), lambda0, maxDepth = 1)
+    val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2._1)
     val expected = Set("a", "b", "c")
@@ -88,7 +93,7 @@ class RegressionTreeTest extends FlatSpec with Matchers with GeneratorDrivenProp
   }
 
   it should "serialize and deserialize to/from json" in {
-    val tree = regressionModel.fit(data)
+    val (tree, _) = regressionModel.fit(data)
     val serialized = tree.asJson.noSpaces
     implicit val fs = abFeats
     val deserialized = DecisionTree.fromJson[MixedMap[String], Double](serialized)

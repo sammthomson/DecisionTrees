@@ -1,16 +1,11 @@
 package org.samthomson.ml.decisiontree
 
-import com.typesafe.scalalogging.LazyLogging
 import io.circe._
 import io.circe.syntax._
 import org.samthomson.ml.LazyStats.weightedMean
 import org.samthomson.ml.Weighted
-import org.samthomson.ml.WeightedMse.{Stats => MseStats}
-import org.samthomson.ml.decisiontree.FeatureSet.Mixed
 import spire.algebra.Field
-import spire.implicits._
-
-import scala.math.{abs, max}
+import scala.math.max
 
 
 @SerialVersionUID(1L)
@@ -130,100 +125,5 @@ object Leaf {
   def averaging[X, Y: Field](examples: Iterable[Weighted[Example[X, Y]]]): Leaf[Y] = {
     val weightedOutputs = examples.map(_.map(_.output))
     Leaf(weightedMean(weightedOutputs))
-  }
-}
-
-@SerialVersionUID(1L)
-case class RegressionTree[K, X](feats: Mixed[K, X],
-                                lambda0: Double,
-                                maxDepth: Int) extends LazyLogging {
-  val tolerance = 1e-6
-  // prefer evenly weighted splits (for symmetry breaking)
-  val evenWeightPreference = 1e-3
-
-  private val am = MseStats.hasAdditiveMonoid[Double]
-
-  def fit(data: Iterable[Weighted[Example[X, Double]]]): DecisionTree[X, Double] = {
-    logger.debug("fitting regression tree, depth: " + maxDepth)
-    val mseStats = MseStats.of(data.map(_.map(_.output)))  // TODO: cache
-    val baseError = mseStats.error
-    if (maxDepth <= 1 || data.isEmpty || baseError <= tolerance) {
-      Leaf.averaging(data)
-    } else {
-      val (split, error) = bestSplitAndError(data)
-      val (leftData, rightData) = data.partition(e => split(e.input))
-      // TODO: Better to prune afterwards than to stop early? Sometimes you need to make splits
-      // that don't improve in order to make later splits that do improve.
-      if (leftData.isEmpty || rightData.isEmpty || baseError - error + tolerance < lambda0) {
-        Leaf.averaging(data)
-      } else {
-        val shorter: RegressionTree[K, X] = this.copy(maxDepth = maxDepth - 1)
-        val left = shorter.fit(leftData)
-        val right = shorter.fit(rightData)
-        Split(split, left, right)
-      }
-    }
-  }
-
-  // finds the split that minimizes squared error
-  def bestSplitAndError(examples: Iterable[Weighted[Example[X, Double]]]): (Splitter[X], Double) = {
-    val allSplits = continuousSplitsAndErrors(examples) ++ binarySplitsAndErrors(examples)
-    val (split, (err, _)) = allSplits.minBy({ case (s, (er, even)) =>
-//      logger.debug(f"split: $s%15s, error: $er%15.5f")
-      er + evenWeightPreference * even
-    })
-    (split, err)
-  }
-
-  def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(BoolSplitter[K, X], (Double, Double))] = {
-    def stats(xs: Iterable[Weighted[Example[X, Double]]]): MseStats[Double] = MseStats.of(xs.map(_.map(_.output)))
-    val binary = feats.binary
-    binary.feats.toSeq.par.map(feature => {
-      val (l, r) = examples.partition(e => binary.get(e.input)(feature))
-      (BoolSplitter(feature)(binary), totalErrAndEvenness(stats(l), stats(r)))
-    }).seq
-  }
-
-  def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(FeatureThreshold[K, X], (Double, Double))] = {
-    val continuous = feats.continuous
-    continuous.feats.toSeq.par.flatMap(feature => {
-      val statsByThreshold =
-        examples.groupBy(e => continuous.get(e.input)(feature))
-            .mapValues(exs => MseStats.of(exs.map(_.map(_.output))))
-            .toVector
-            .sortBy(_._1)
-      val splits = statsByThreshold.map(_._1).map(v => FeatureThreshold[K, X](feature, v)(continuous))
-      val errors = {
-        val stats = statsByThreshold.map(_._2)
-        // errors of left and right side of each split value.
-        // found by taking cumulative stats starting from from left, right, respectively.
-        val leftErrors = stats.scanLeft(am.zero)(am.plus).tail
-        val rightErrors = stats.scanRight(am.zero)(am.plus).tail
-        (leftErrors zip rightErrors).map { case (l, r) => totalErrAndEvenness(l, r) }
-      }
-      splits zip errors
-    }).seq
-  }
-
-  def categoricalSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]],
-                                 exclusiveFeats: Set[K]): Seq[(OrSplitter[K, X], (Double, Double))] = {
-    val binary = feats.binary
-    val stats = exclusiveFeats.par
-        .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
-        .toVector
-        .sortBy(_._2.mean)
-    // TODO: consider non-contiguous splits?
-    val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
-    val errors = {
-      val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail
-      val rightErrors = stats.map(_._2).scanRight(am.zero)(am.plus).tail
-      (leftErrors zip rightErrors).map { case (l, r) => totalErrAndEvenness(l, r) }
-    }
-    splits zip errors
-  }
-
-  private def totalErrAndEvenness(l: MseStats[Double],
-                                  r: MseStats[Double]): (Double, Double) = {
-    (l.error + r.error, abs(l.weight - r.weight))
   }
 }
