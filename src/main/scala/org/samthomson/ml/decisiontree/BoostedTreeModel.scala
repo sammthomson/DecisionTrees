@@ -7,6 +7,7 @@ import org.samthomson.ml.WeightedMean.{Stats => MeanStats}
 import org.samthomson.ml.decisiontree.FeatureSet.Mixed
 import org.samthomson.util.StreamFunctions.unfold
 import spire.implicits._
+import scala.collection.parallel.ParSeq
 import scala.math._
 
 
@@ -51,16 +52,16 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
     allSplits.minBy(_._2)._1
   }
 
-  def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(BoolSplitter[K, X], (Double, Double))] = {
+  def binarySplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): ParSeq[(BoolSplitter[K, X], (Double, Double))] = {
     def stats(xs: Iterable[Weighted[Example[X, Double]]]): MseStats[Double] = MseStats.of(xs.map(_.map(_.output)))
     val binary = feats.binary
     binary.feats.toSeq.par.map(feature => {
       val (l, r) = examples.partition(e => binary.get(e.input)(feature))
       (BoolSplitter(feature)(binary), totalErrAndEvenness(stats(l), stats(r)))
-    }).seq
+    })
   }
 
-  def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): Seq[(FeatureThreshold[K, X], (Double, Double))] = {
+  def continuousSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]]): ParSeq[(FeatureThreshold[K, X], (Double, Double))] = {
     val continuous = feats.continuous
     continuous.feats.toSeq.par.flatMap(feature => {
       val statsByThreshold =
@@ -78,7 +79,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
         (leftErrors zip rightErrors).map { case (l, r) => totalErrAndEvenness(l, r) }
       }
       splits zip errors
-    }).seq
+    })
   }
 
   def categoricalSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]],
