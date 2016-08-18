@@ -30,7 +30,7 @@ trait TwiceDiffableLoss[-Y, P] extends DiffableLoss[Y, P] {
 }
 
 object TwiceDiffableLoss {
-  /** (gold - predicted)^2 */
+  /** (gold - predicted)^2^ */
   object SquaredError extends TwiceDiffableLoss[Double, Double] {
     override def lossGradAndHessian(gold: Double)(predicted: Double): (Double, Double, Double) = {
       val err = gold - predicted
@@ -38,7 +38,7 @@ object TwiceDiffableLoss {
     }
   }
 
-  /** -ln( e^score(gold) / sum_y { e^score(y) } ) */
+  /** -ln( e^score(gold)^ / sum_y { e^score(y)^ } ) */
   case class MultiClassLogLoss[Y]() extends TwiceDiffableLoss[Y, Map[Y, Double]] {
     override def lossGradAndHessian(gold: Y)(predicted: Map[Y, Double]): (Double, Map[Y, Double], Map[Y, Double]) = {
       val exponentiatedScores = predicted.mapValues(exp)
@@ -74,7 +74,7 @@ object TwiceDiffableLoss {
     }
   }
 
-  /** sum_y { max(0, score(y) + cost(y) - score(gold))^2 } */
+  /** sum_y { max(0, score(y) + cost(y) - score(gold))^2^ } */
   case class MultiClassSquaredHinge[Y]() extends TwiceDiffableLoss[Y, Map[Y, Double]] {
     val hinge = MultiClassHinge[Y]()
 
