@@ -103,8 +103,8 @@ object DecisionTree {
 case class Split[-X, Y](split: Splitter[X],
                         left: DecisionTree[X, Y],
                         right: DecisionTree[X, Y]) extends DecisionTree[X, Y] {
-  override lazy val depth = max(left.depth, right.depth) + 1
-  override lazy val numNodes = left.numNodes + right.numNodes + 1
+  override def depth = max(left.depth, right.depth) + 1
+  override def numNodes = left.numNodes + right.numNodes + 1
   final override def predict(input: X): Y = split.choose(input)(left, right).predict(input)
   override def prettyPrint(indent: String): String = {
     val indented = indent + "  "
@@ -116,8 +116,8 @@ case class Split[-X, Y](split: Splitter[X],
   }
 }
 case class Leaf[Y](constant: Y) extends DecisionTree[Any, Y] {
-  override val depth = 1
-  override val numNodes = 1
+  override def depth = 1
+  override def numNodes = 1
   final override def predict(input: Any): Y = constant
   override def prettyPrint(indent: String): String = indent + s"Leaf($constant)"
 }

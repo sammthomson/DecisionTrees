@@ -72,7 +72,7 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
     val feats = Set("a", "b", "c", "d")
     val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
-    val (bestSplit, _) = splits.minBy(_._2._1)
+    val (bestSplit, _) = splits.minBy(_._2.totalErrAndEvenness.error)
     val expected = Set("a", "b")
     bestSplit.features.toSet should be (expected)
   }
@@ -87,7 +87,7 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
     val feats = Set("a", "b", "c", "d")
     val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
-    val (bestSplit, _) = splits.minBy(_._2._1)
+    val (bestSplit, _) = splits.minBy(_._2.totalErrAndEvenness.error)
     val expected = Set("a", "b", "c")
     bestSplit.features.toSet should be (expected)
   }

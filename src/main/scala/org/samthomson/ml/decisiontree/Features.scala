@@ -8,22 +8,22 @@ import scala.language.implicitConversions
  *
   * @tparam K the type of features
   * @tparam V the type of feature values
-  * @tparam F the type of objects that map `K => V`
+  * @tparam X the type of objects that map `K => V`
   */
 @SerialVersionUID(1L)
-trait FeatureSet[K, +V, -F] extends Serializable {
+trait FeatureSet[K, +V, -X] extends Serializable {
   def feats: Set[K]
-  def get(x: F)(feat: K): V
+  def get(x: X)(feat: K): V
   // derived:
 //  implicit def asFunction(x: X): (F => V) = { f => get(f)(x) }
 }
 object FeatureSet {
-  type Binary[K, -F] = FeatureSet[K, Boolean, F]
-  type Continuous[K, -F] = FeatureSet[K, Double, F]
+  type Binary[K, -X] = FeatureSet[K, Boolean, X]
+  type Continuous[K, -X] = FeatureSet[K, Double, X]
 
-  def apply[K, V, F](fs: Set[K])(implicit g: F => (K => V)): FeatureSet[K, V, F] = new FeatureSet[K, V, F] {
+  def apply[K, V, X](fs: Set[K])(implicit g: X => (K => V)): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
     override val feats: Set[K] = fs
-    override def get(x: F)(feat: K): V = g(x)(feat)
+    override def get(x: X)(feat: K): V = g(x)(feat)
   }
 
   def empty[K]: FeatureSet[K, Nothing, Any] = {
