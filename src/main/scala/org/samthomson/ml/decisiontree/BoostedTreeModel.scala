@@ -29,11 +29,13 @@ object IndexedExamples {
                     (implicit mixed: Mixed[K, X]): IndexedExamples[X, Y, K] = {
     val examples = data.toVector
     val binaryIndex = Map() ++ mixed.binary.feats.map { k =>
-      k -> examples.zipWithIndex.collect { case (x, i) if mixed.binary.get(x.input)(k) => i }.toSet
+      val getK = mixed.binary.get(k)(_)
+      k -> examples.zipWithIndex.collect { case (x, i) if getK(x.input) => i }.toSet
     }
     val continuousIndex = Map() ++ mixed.continuous.feats.toSeq.par.map(k => {
+      val getK = mixed.continuous.get(k)(_)
       val exampleIdxsByThreshold =
-        examples.zipWithIndex.groupBy({ case (x, i) => mixed.continuous.get(x.input)(k) })
+        examples.zipWithIndex.groupBy({ case (x, i) => getK(x.input) })
             .mapValues(_.map(_._2).toSet)
             .toVector
             .sortBy(_._1)
@@ -134,8 +136,10 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
     // TODO: use IndexedExamples
     val binary = feats.binary
     val stats = exclusiveFeats.par
-        .map(feat => feat -> MseStats.of(examples.filter(e => binary.get(e.input)(feat)).map(_.map(_.output))))
-        .toVector
+        .map({feat =>
+          val getK = binary.get(feat)(_)
+          feat -> MseStats.of(examples.filter(e => getK(e.input)).map(_.map(_.output)))
+        }).toVector
         .sortBy(_._2.mean)
     // TODO: consider non-contiguous splits?
     val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))

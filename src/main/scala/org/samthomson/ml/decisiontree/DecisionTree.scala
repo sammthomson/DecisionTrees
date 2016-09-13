@@ -48,17 +48,17 @@ object Splitter {
 case class FeatureThreshold[+F, X](feature: F,
                                    threshold: Double)
                                   (implicit cf: FeatureSet.Continuous[F, X]) extends Splitter[X] {
-  override def isLeft(input: X): Boolean = cf.get(input)(feature) <= threshold
+  override def isLeft(input: X): Boolean = cf.get(feature)(input) <= threshold
   override def toString: String = s"$feature <= $threshold"
 }
 case class BoolSplitter[+F, -X](feature: F)
                                (implicit bf: FeatureSet.Binary[F, X]) extends Splitter[X] {
-  override def isLeft(input: X): Boolean = bf.get(input)(feature)
+  override def isLeft(input: X): Boolean = bf.get(feature)(input)
   override def toString: String = s"$feature"
 }
 case class OrSplitter[+F, -X](features: Iterable[F])
                              (implicit bf: FeatureSet.Binary[F, X]) extends Splitter[X] {
-  override def isLeft(input: X): Boolean = features.exists(bf.get(input))
+  override def isLeft(input: X): Boolean = features.exists(bf.get(_)(input))
   override def toString: String = s"or(${features.mkString(", ")})"
 }
 

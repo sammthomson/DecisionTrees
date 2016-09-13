@@ -13,17 +13,15 @@ import scala.language.implicitConversions
 @SerialVersionUID(1L)
 trait FeatureSet[K, +V, -X] extends Serializable {
   def feats: Set[K]
-  def get(x: X)(feat: K): V
-  // derived:
-//  implicit def asFunction(x: X): (F => V) = { f => get(f)(x) }
+  def get(feat: K)(x: X): V
 }
 object FeatureSet {
   type Binary[K, -X] = FeatureSet[K, Boolean, X]
   type Continuous[K, -X] = FeatureSet[K, Double, X]
 
-  def apply[K, V, X](fs: Set[K])(implicit g: X => (K => V)): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
+  def apply[K, V, X](fs: Set[K])(implicit g: K => (X => V)): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
     override val feats: Set[K] = fs
-    override def get(x: X)(feat: K): V = g(x)(feat)
+    override def get(feat: K)(x: X): V = g(feat)(x)
   }
 
   def empty[K]: FeatureSet[K, Nothing, Any] = {
@@ -35,9 +33,9 @@ object FeatureSet {
                               FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
     new FeatureSet[Either[K1, K2], V, (X, Y)] {
       override val feats: Set[Either[K1, K2]] = FX.feats.map(Left(_)) ++ FY.feats.map(Right(_))
-      override def get(xy: (X, Y))(feat: Either[K1, K2]) = (xy, feat) match {
-        case ((x, _), Left(f)) => FX.get(x)(f)
-        case ((_, y), Right(f)) => FY.get(y)(f)
+      override def get(feat: Either[K1, K2])(xy: (X, Y)) = (xy, feat) match {
+        case ((x, _), Left(f)) => FX.get(f)(x)
+        case ((_, y), Right(f)) => FY.get(f)(y)
       }
     }
   }
@@ -77,7 +75,7 @@ object MixedMap {
     MixedMap(a.binarySet ++ b.binarySet, a.continuousMap ++ b.continuousMap)
   }
   def feats[F](binaryFeats: Set[F], continuousFeats: Set[F]): FeatureSet.Mixed[F, MixedMap[F]] = FeatureSet.Mixed(
-    FeatureSet(binaryFeats)(mm => f => mm.binarySet.contains(f)),
-    FeatureSet(continuousFeats)(mm => f => mm.continuousMap.getOrElse(f, 0.0))
+    FeatureSet(binaryFeats)(k => mm => mm.binarySet.contains(k)),
+    FeatureSet(continuousFeats)(k => mm => mm.continuousMap.getOrElse(k, 0.0))
   )
 }
