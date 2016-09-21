@@ -25,7 +25,7 @@ object Model {
 case class MultiClassModel[-X, Y](outputSpace: X => Iterable[Y],
                                   scoringModel: Model[(X, Y), Double]) extends Model[X, Y] with Equals {
 
-  def scores(input: X): Iterable[(Y, Double)] = outputSpace(input).map(o => o -> scoringModel.predict((input, o)))
+  def scores(input: X): Iterable[(Y, Double)] = outputSpace(input).map(y => y -> scoringModel.predict((input, y)))
 
   override def predict(input: X): Y = scores(input).maxBy(_._2)._1
 

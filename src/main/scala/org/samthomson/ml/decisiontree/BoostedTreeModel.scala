@@ -14,20 +14,25 @@ import scala.math._
 /**
   * A column-indexed database of training examples
  *
-  * @param examples the original examples
+  * @param inputs the original examples
   * @param binaryIndex map from feature to set of idxs of examples for which that feature fires
   * @param continuousIndex map from feature to iterable of (feature value, example idx) pairs
   * @tparam X the input type
   * @tparam Y the output type
   * @tparam K the type of features
   */
-case class IndexedExamples[X, Y, K](examples: IndexedSeq[Weighted[Example[X, Y]]],
+case class IndexedExamples[X, Y, K](inputs: IndexedSeq[X],
+                                    outputs: IndexedSeq[Weighted[Y]],
                                     binaryIndex: GenMap[K, Set[Int]],
-                                    continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]])
+                                    continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]]) {
+  def example(i: Int): Weighted[Example[X, Y]] = outputs(i).map(Example(inputs(i), _))
+}
 object IndexedExamples {
   def build[X, Y, K](data: TraversableOnce[Weighted[Example[X, Y]]])
                     (implicit mixed: Mixed[K, X]): IndexedExamples[X, Y, K] = {
     val examples = data.toVector
+    val inputs = examples.map(_.input)
+    val outputs = examples.map(_.map(_.output))
     val binaryIndex = Map() ++ mixed.binary.feats.map { k =>
       val getK = mixed.binary.get(k)(_)
       k -> examples.zipWithIndex.collect { case (x, i) if getK(x.input) => i }.toSet
@@ -41,7 +46,7 @@ object IndexedExamples {
             .sortBy(_._1)
       k -> exampleIdxsByThreshold
     })
-    IndexedExamples(examples, binaryIndex, continuousIndex)
+    IndexedExamples(inputs, outputs, binaryIndex, continuousIndex)
   }
 }
 
@@ -58,7 +63,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
           indices: Set[Int], // which of all the examples we're actually fitting to
           baseError: Double): (DecisionTree[X, Double], Double) = {
     logger.debug("fitting regression tree, depth: " + maxDepth)
-    lazy val leaf = (Leaf.averaging(indices.map(db.examples)), baseError)
+    lazy val leaf = (Leaf.averaging(indices.map(db.example)), baseError)
     if (maxDepth <= 1 || indices.isEmpty || baseError <= tolerance) {
       leaf
     } else {
@@ -66,7 +71,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
         case None => leaf
         case Some((split, errs)) =>
           // TODO: I think it would be faster to split/partition the db also
-          val (leftData, rightData) = indices.partition(i => split(db.examples(i).input))
+          val (leftData, rightData) = indices.partition(i => split(db.inputs(i)))
           val shorterModel: RegressionTreeModel[K, X] = this.copy(maxDepth = maxDepth - 1)
           val (leftTree, leftErr) = shorterModel.fit(db, leftData, errs.left.error)
           val (rightTree, rightErr) = shorterModel.fit(db, rightData, errs.right.error)
@@ -85,14 +90,14 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
   def fit(data: Iterable[Weighted[Example[X, Double]]]): (DecisionTree[X, Double], Double) = {
     // TODO: when boosting, the db stays the same except for outputs. no need to build the whole thing again.
     val db = IndexedExamples.build(data)(feats)
-    fit(db, db.examples.indices.toSet, MseStats.of(data.map(_.map(_.output))).error)
+    fit(db, db.inputs.indices.toSet, MseStats.of(data.map(_.map(_.output))).error)
   }
 
   private def splitData(indices: Set[Int], xs: Set[Int]): (Set[Int], Set[Int]) =
     (xs.intersect(indices), indices.diff(xs))
 
   private def stats(db: IndexedExamples[X, Double, K])(xs: TraversableOnce[Int]): MseStats[Double] =
-    MseStats.of(xs.map(db.examples).map(_.map(_.output)))
+    MseStats.of(xs.map(db.example).map(_.map(_.output)))
 
   // finds the split that minimizes squared error
   def bestSplitIdxsAndStats(examples: IndexedExamples[X, Double, K],
@@ -117,7 +122,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
                                indices: Set[Int]): GenMap[FeatureThreshold[K, X], LeftAndRightStats] =
     db.continuousIndex.par.flatMap { case (k, thresholds) =>
       val statsByThreshold = thresholds.map({ case (thresh, exs) =>
-        (thresh, MseStats.of(exs.intersect(indices).map(db.examples).map(_.map(_.output))))
+        (thresh, MseStats.of(exs.intersect(indices).map(db.example).map(_.map(_.output))))
       })
       val splits = thresholds.map(_._1).map(v => FeatureThreshold[K, X](k, v)(feats.continuous))
       val errors = {
@@ -184,8 +189,16 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
 
   def optimizationPath(data: Iterable[Example[X, Y]])
                       (initialModel: Model[(X, Y), Double]): Stream[(Ensemble[(X, Y), Double], Double)] = {
+    val candidates = data.map { ex =>
+      (ex, outputSpace(ex.input).toVector)
+    }.toVector
+    val ioPairs = candidates.flatMap { case (Example(x, goldLabel), cands) =>
+      // example output will get replaced inside `fitNextTree
+      cands.map(y => Weighted(Example((x, y), 0.0), 1.0))
+    }
+    val db = IndexedExamples.build(ioPairs)(xyFeats)
     unfold (Vector(initialModel)) { forest =>
-      val (oTree, loss) = fitNextTree(data, toModel(forest))
+      val (oTree, loss) = fitNextTree(candidates, db, toModel(forest))
       oTree.map({ tree =>
         // yield the new tree, and update the "unfold" state to include the new tree
         val newForest = forest :+ tree
@@ -194,7 +207,8 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
     }
   }
 
-  def fitNextTree(data: Iterable[Example[X, Y]],
+  def fitNextTree(data: Vector[(Example[X, Y], Vector[Y])],
+                  db: IndexedExamples[(X, Y), Double, K],
                   currentModel: MultiClassModel[X, Y]): (Option[DecisionTree[(X, Y), Double]], Double) = {
     var totalLoss = MeanStats(0.0, 0.0)  // keep track of objective value (loss)
     var n = 0  // number of examples
@@ -202,26 +216,31 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
     // do the old AdaBoost thing where you turn the quadratic fns into a weighted
     // regression problem.
     logger.debug("calculating residuals")
-    val residuals = data.flatMap { case Example(input, goldLabel) =>
+    val residuals = data.flatMap { case (Example(input, goldLabel), candidates) =>
       // our forest-so-far produces a score (real number) for each (input, output) pair.
-      val scores = currentModel.scores(input).toMap
+      val scores = currentModel.scores(input)
       // calculate loss and its first two derivatives with respect to scores.
       // hessian is actually a diagonal approximation (i.e. ignores interactions btwn scores).
-      val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores)
+      val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores.toMap)
       totalLoss += MeanStats(1.0, loss)
       n += 1
-      gradient.map { case (y, grad) =>
+      candidates.map { y =>
+        val grad = gradient(y)
         val hess = hessian(y) + lambda2
         // newLoss ~= w * (.5 * hess * theta^2 + grad * theta + oldLoss)    // 2nd-order Taylor approx
         //          = .5 * w * hess * (-grad/hess - theta)^2 + Constant
         //          = weighted squared error of theta w.r.t. -grad / hess
-        val argmin = -grad / hess
+        val residual = -grad / hess
         val weight = .5 * hess
-        Weighted(Example((input, y), argmin), weight)
+        Weighted(residual, weight)
       }
-    }
+    }.toVector
     logger.debug(f"loss per example: ${totalLoss.mean}%10.5f")
-    val (nextTree, _) = regressionModel.fit(residuals)
+    val (nextTree, _) = regressionModel.fit(
+      db.copy(outputs = residuals),
+      db.inputs.indices.toSet,
+      MseStats.of(residuals).error
+    )
     nextTree match {
       case Leaf(avg) if math.abs(avg) <= lambda0 =>
         // don't waste my time with these mickey mouse trees
