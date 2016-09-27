@@ -8,7 +8,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 object RegressionTreeModelTest {
   val continuousFeats = Set("a", "b")
-  val abFeats = MixedMap.feats(Set[String](), continuousFeats)
+  val abFeats = MixedMap.featSet(Set[String](), continuousFeats)
   private val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
     case ((a, b), y) => Example(MixedMap(Set(), Map("a" -> a, "b" -> b)), y)
   }

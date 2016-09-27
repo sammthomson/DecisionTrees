@@ -1,5 +1,6 @@
 package org.samthomson.ml.decisiontree
 
+
 import com.typesafe.scalalogging.LazyLogging
 import org.samthomson.ml.Weighted
 import org.samthomson.ml.WeightedMse.{Stats => MseStats}
@@ -7,13 +8,13 @@ import org.samthomson.ml.WeightedMean.{Stats => MeanStats}
 import org.samthomson.ml.decisiontree.FeatureSet.Mixed
 import org.samthomson.util.StreamFunctions.unfold
 import spire.implicits._
-import scala.collection.{GenMap, GenSeq}
+import scala.collection.{mutable => m, GenMap, GenSeq}
 import scala.math._
 
 
 /**
   * A column-indexed database of training examples
- *
+  *
   * @param inputs the original examples
   * @param binaryIndex map from feature to set of idxs of examples for which that feature fires
   * @param continuousIndex map from feature to iterable of (feature value, example idx) pairs
@@ -27,26 +28,36 @@ case class IndexedExamples[X, Y, K](inputs: IndexedSeq[X],
                                     continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]]) {
   def example(i: Int): Weighted[Example[X, Y]] = outputs(i).map(Example(inputs(i), _))
 }
-object IndexedExamples {
+object IndexedExamples extends LazyLogging {
   def build[X, Y, K](data: TraversableOnce[Weighted[Example[X, Y]]])
                     (implicit mixed: Mixed[K, X]): IndexedExamples[X, Y, K] = {
+    logger.debug("Building feature index.")
     val examples = data.toVector
     val inputs = examples.map(_.input)
     val outputs = examples.map(_.map(_.output))
-    val binaryIndex = Map() ++ mixed.binary.feats.map { k =>
-      val getK = mixed.binary.get(k)(_)
-      k -> examples.zipWithIndex.collect { case (x, i) if getK(x.input) => i }.toSet
+    val binary = mixed.binary
+    val continuous = mixed.continuous
+    val binaryIndex = m.Map.empty[K, m.Set[Int]]
+    val continuousIndex = m.Map.empty[K, m.Map[Double, m.Set[Int]]]
+    examples.zipWithIndex.foreach {
+      case (Weighted(Example(x, y), w), i) =>
+        for ((k, v) <- binary.featVals(x)) {
+          if (!binaryIndex.contains(k)) binaryIndex(k) = m.Set.empty
+          binaryIndex(k) += i
+        }
+        for ((k, v) <- continuous.featVals(x)) {
+          if (!continuousIndex.contains(k)) continuousIndex(k) = m.Map.empty
+          if (!continuousIndex(k).contains(v)) continuousIndex(k)(v) = m.Set.empty
+          continuousIndex(k)(v) += i
+        }
     }
-    val continuousIndex = Map() ++ mixed.continuous.feats.toSeq.par.map(k => {
-      val getK = mixed.continuous.get(k)(_)
-      val exampleIdxsByThreshold =
-        examples.zipWithIndex.groupBy({ case (x, i) => getK(x.input) })
-            .mapValues(_.map(_._2).toSet)
-            .toVector
-            .sortBy(_._1)
-      k -> exampleIdxsByThreshold
-    })
-    IndexedExamples(inputs, outputs, binaryIndex, continuousIndex)
+    logger.debug("Done building feature index.")
+    IndexedExamples(
+      inputs,
+      outputs,
+      binaryIndex.mapValues(_.toSet).toMap,
+      continuousIndex.mapValues(_.mapValues(_.toSet).toSeq.sortBy(_._1))
+    )
   }
 }
 
@@ -67,9 +78,10 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
     if (maxDepth <= 1 || indices.isEmpty || baseError <= tolerance) {
       leaf
     } else {
-      bestSplitIdxsAndStats(db, indices) match {
+      bestSplitAndStats(db, indices) match {
         case None => leaf
         case Some((split, errs)) =>
+          logger.debug(s"found best split: $split, $errs")
           // TODO: I think it would be faster to split/partition the db also
           val (leftData, rightData) = indices.partition(i => split(db.inputs(i)))
           val shorterModel: RegressionTreeModel[K, X] = this.copy(maxDepth = maxDepth - 1)
@@ -100,8 +112,8 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
     MseStats.of(xs.map(db.example).map(_.map(_.output)))
 
   // finds the split that minimizes squared error
-  def bestSplitIdxsAndStats(examples: IndexedExamples[X, Double, K],
-                            indices: Set[Int]): Option[(Splitter[X], LeftAndRightStats)] = {
+  def bestSplitAndStats(examples: IndexedExamples[X, Double, K],
+                        indices: Set[Int]): Option[(Splitter[X], LeftAndRightStats)] = {
     val allSplits = continuousSplitsAndStats(examples, indices) ++ binarySplitsAndStats(examples, indices)
     val nonUselessSplits = allSplits.filter { case (split, stats) => stats.left.weight > 0 && stats.right.weight > 0 }
     if (nonUselessSplits.nonEmpty) {
@@ -234,7 +246,7 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
         val weight = .5 * hess
         Weighted(residual, weight)
       }
-    }.toVector
+    }
     logger.debug(f"loss per example: ${totalLoss.mean}%10.5f")
     val (nextTree, _) = regressionModel.fit(
       db.copy(outputs = residuals),
