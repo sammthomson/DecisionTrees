@@ -2,7 +2,7 @@ package org.samthomson.ml.decisiontree
 
 
 import com.typesafe.scalalogging.LazyLogging
-import org.samthomson.ml.Weighted
+import org.samthomson.ml.{WeightedMse, Weighted}
 import org.samthomson.ml.WeightedMse.{Stats => MseStats}
 import org.samthomson.ml.WeightedMean.{Stats => MeanStats}
 import org.samthomson.ml.decisiontree.FeatureSet.Mixed
@@ -72,28 +72,28 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
 
   def fit(db: IndexedExamples[X, Double, K],
           indices: Set[Int], // which of all the examples we're actually fitting to
-          baseError: Double): (DecisionTree[X, Double], Double) = {
+          baseStats: WeightedMse.Stats[Double]): (DecisionTree[X, Double], Double) = {
     logger.debug("fitting regression tree, depth: " + maxDepth)
-    lazy val leaf = (Leaf.averaging(indices.map(db.example)), baseError)
-    if (maxDepth <= 1 || indices.isEmpty || baseError <= tolerance) {
+    lazy val leaf = (Leaf.averaging(indices.map(db.example)), baseStats.error)
+    if (maxDepth <= 1 || indices.isEmpty || baseStats.error <= tolerance) {
       leaf
     } else {
-      bestSplitAndStats(db, indices) match {
+      bestSplitAndStats(db, indices, baseStats) match {
         case None => leaf
         case Some((split, errs)) =>
           logger.debug(s"found best split: $split, $errs")
           // TODO: I think it would be faster to split/partition the db also
           val (leftData, rightData) = indices.partition(i => split(db.inputs(i)))
           val shorterModel: RegressionTreeModel[K, X] = this.copy(maxDepth = maxDepth - 1)
-          val (leftTree, leftErr) = shorterModel.fit(db, leftData, errs.left.error)
-          val (rightTree, rightErr) = shorterModel.fit(db, rightData, errs.right.error)
+          val (leftTree, leftStats) = shorterModel.fit(db, leftData, errs.left)
+          val (rightTree, rightStats) = shorterModel.fit(db, rightData, errs.right)
           val result = Split(split, leftTree, rightTree)
-          val error = leftErr + rightErr
-          if (baseError - error + tolerance < lambda0 * (result.numNodes - 1)) {
+          val newStats = leftStats + rightStats
+          if (baseStats.error - newStats + tolerance < lambda0 * (result.numNodes - 1)) {
             logger.debug(s"pruning: $result")
             leaf
           } else {
-            (result, error)
+            (result, newStats)
           }
       }
     }
@@ -102,19 +102,17 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
   def fit(data: Iterable[Weighted[Example[X, Double]]]): (DecisionTree[X, Double], Double) = {
     // TODO: when boosting, the db stays the same except for outputs. no need to build the whole thing again.
     val db = IndexedExamples.build(data)(feats)
-    fit(db, db.inputs.indices.toSet, MseStats.of(data.map(_.map(_.output))).error)
+    fit(db, db.inputs.indices.toSet, MseStats.of(data.map(_.map(_.output))))
   }
-
-  private def splitData(indices: Set[Int], xs: Set[Int]): (Set[Int], Set[Int]) =
-    (xs.intersect(indices), indices.diff(xs))
 
   private def stats(db: IndexedExamples[X, Double, K])(xs: TraversableOnce[Int]): MseStats[Double] =
     MseStats.of(xs.map(db.example).map(_.map(_.output)))
 
   // finds the split that minimizes squared error
   def bestSplitAndStats(examples: IndexedExamples[X, Double, K],
-                        indices: Set[Int]): Option[(Splitter[X], LeftAndRightStats)] = {
-    val allSplits = continuousSplitsAndStats(examples, indices) ++ binarySplitsAndStats(examples, indices)
+                        indices: Set[Int],
+                        totalStats: WeightedMse.Stats[Double]): Option[(Splitter[X], LeftAndRightStats)] = {
+    val allSplits = continuousSplitsAndStats(examples, indices) ++ binarySplitsAndStats(examples, indices, totalStats)
     val nonUselessSplits = allSplits.filter { case (split, stats) => stats.left.weight > 0 && stats.right.weight > 0 }
     if (nonUselessSplits.nonEmpty) {
       Some(nonUselessSplits.minBy(_._2.totalErrAndEvenness))
@@ -124,10 +122,13 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
   }
 
   def binarySplitsAndStats(db: IndexedExamples[X, Double, K],
-                           indices: Set[Int]): GenMap[BoolSplitter[K, X], LeftAndRightStats] =
+                           indices: Set[Int],
+                           totalStats: WeightedMse.Stats[Double]): GenMap[BoolSplitter[K, X], LeftAndRightStats] =
     db.binaryIndex.par.map { case (k, xs) =>
-      val (l, r) = splitData(indices, xs)
-      (BoolSplitter(k)(feats.binary), LeftAndRightStats(stats(db)(l), stats(db)(r)))
+      val leftIdxs = xs.intersect(indices)
+      val leftStats = stats(db)(leftIdxs)
+      val rightStats = totalStats - leftStats
+      (BoolSplitter(k)(feats.binary), LeftAndRightStats(leftStats, rightStats))
     }
 
   def continuousSplitsAndStats(db: IndexedExamples[X, Double, K],
@@ -251,7 +252,7 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
     val (nextTree, _) = regressionModel.fit(
       db.copy(outputs = residuals),
       db.inputs.indices.toSet,
-      MseStats.of(residuals).error
+      MseStats.of(residuals)
     )
     nextTree match {
       case Leaf(avg) if math.abs(avg) <= lambda0 =>
