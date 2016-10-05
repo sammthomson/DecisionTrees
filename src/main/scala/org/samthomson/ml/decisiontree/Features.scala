@@ -17,7 +17,7 @@ trait FeatureSet[K, +V, -X] extends Serializable {
   def feats: Set[K]
   def get(feat: K)(x: X): V
   // derived, override for sparse feature sets
-  def featVals(x: X): Map[K, V] = feats.map(k => k -> get(k)(x)).toMap
+  def featVals(x: X): Map[K, V] = feats.iterator.map(k => k -> get(k)(x)).toMap
 
   def compose[B](f: B => X): FeatureSet[K, V, B] = FeatureSet.Composed(this, f)
 }
@@ -53,15 +53,12 @@ object FeatureSet {
     }
   }
 
-  case class OneHot[K](feats: Set[K]) extends Binary[K, K] {
-    override def get(feat: K)(x: K): Boolean = feat == x
-    override def featVals(x: K): Map[K, Boolean] = Map(x -> true).withDefaultValue(false)
-  }
-
   case class SparseBinary[K](feats: Set[K]) extends Binary[K, Set[K]] {
     override def get(feat: K)(x: Set[K]): Boolean = x.contains(feat)
-    override def featVals(x: Set[K]): Map[K, Boolean] = x.map(_ -> true).toMap.withDefaultValue(false)
+    override def featVals(x: Set[K]): Map[K, Boolean] = x.iterator.map(_ -> true).toMap.withDefaultValue(false)
   }
+
+  def oneHot[K](feats: Set[K]): Binary[K, K] = SparseBinary(feats) compose (Set(_))
 
   case class Composed[A, B, K, V](featureSet: FeatureSet[K, V, B], f: A => B) extends FeatureSet[K, V, A] {
     override def feats: Set[K] = featureSet.feats

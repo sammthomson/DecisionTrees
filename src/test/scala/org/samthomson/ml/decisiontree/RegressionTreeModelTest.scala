@@ -2,7 +2,7 @@ package org.samthomson.ml.decisiontree
 
 import io.circe.syntax._
 import org.samthomson.ml.Weighted
-import org.samthomson.ml.decisiontree.FeatureSet.OneHot
+import org.samthomson.ml.decisiontree.FeatureSet.oneHot
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -70,7 +70,7 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
       (("d",  5.0), 1.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
+    val model = RegressionTreeModel(oneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2.totalErrAndEvenness.error)
     val expected = Set("a", "b")
@@ -85,7 +85,7 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
       (("d",  5.0), 100.0)
     ).map({ case ((s, y), w) => Weighted(Example(s, y), w) })
     val feats = Set("a", "b", "c", "d")
-    val model = RegressionTreeModel(OneHot(feats), lambda0, maxDepth = 1)
+    val model = RegressionTreeModel(oneHot(feats), lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(data, feats)
     val (bestSplit, _) = splits.minBy(_._2.totalErrAndEvenness.error)
     val expected = Set("a", "b", "c")
