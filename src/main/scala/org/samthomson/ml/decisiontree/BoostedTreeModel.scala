@@ -68,7 +68,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
   import RegressionTreeModel.LeftAndRightStats
 
   val tolerance = 1e-6
-  private val am = MseStats.hasAdditiveMonoid[Double]
+  private val G = MseStats.hasAdditiveGroup[Double]
 
   def fit(db: IndexedExamples[X, Double, K],
           indices: Set[Int], // which of all the examples we're actually fitting to
@@ -141,8 +141,8 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
         val stats = statsByThreshold.map(_._2)
         // errors of left and right side of each split value.
         // found by taking cumulative stats starting from from left, right, respectively.
-        val leftStats = stats.scanLeft(am.zero)(am.plus).tail
-        val rightStats = stats.scanRight(am.zero)(am.plus).tail
+        val leftStats = stats.scanLeft(G.zero)(G.plus).tail
+        val rightStats = stats.scanRight(G.zero)(G.plus).tail
         (leftStats zip rightStats).map { case (l, r) => LeftAndRightStats(l, r) }
       }
       splits zip errors
@@ -161,8 +161,8 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
     // TODO: consider non-contiguous splits?
     val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
     val errors = {
-      val leftErrors = stats.map(_._2).scanLeft(am.zero)(am.plus).tail
-      val rightErrors = stats.map(_._2).scanRight(am.zero)(am.plus).tail
+      val leftErrors = stats.map(_._2).scanLeft(G.zero)(G.plus).tail
+      val rightErrors = stats.map(_._2).scanRight(G.zero)(G.plus).tail
       (leftErrors zip rightErrors).map { case (l, r) => LeftAndRightStats(l, r) }
     }
     splits zip errors
