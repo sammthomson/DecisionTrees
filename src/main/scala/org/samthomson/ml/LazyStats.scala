@@ -1,6 +1,6 @@
 package org.samthomson.ml
 
-import spire.algebra.{AdditiveAbGroup, AdditiveMonoid, Field}
+import spire.algebra.{AdditiveAbGroup, Field}
 import spire.implicits._
 
 import scala.language.implicitConversions
@@ -23,11 +23,11 @@ object WeightedMean {
   object Stats {
     def of[N: Field](x: Weighted[N]): Stats[N] = Stats(x.weight, x.unweighted)
     def of[N: Field](xs: TraversableOnce[Weighted[N]]): Stats[N] = {
-      val am = hasAdditiveMonoid[N]
-      xs.toIterator.map(wx => of(wx)).foldLeft(am.zero)(am.plus)
+      val G = hasAdditiveGroup[N]
+      xs.toIterator.map(wx => of(wx)).foldLeft(G.zero)(G.plus)
     }
 
-    implicit def hasAdditiveMonoid[N](implicit f: Field[N]): AdditiveMonoid[Stats[N]] = new AdditiveMonoid[Stats[N]] {
+    implicit def hasAdditiveGroup[N](implicit f: Field[N]): AdditiveAbGroup[Stats[N]] = new AdditiveAbGroup[Stats[N]] {
       override def zero: Stats[N] = Stats(0.0, f.zero)
       override def plus(x: Stats[N], y: Stats[N]): Stats[N] = {
         val (a, b) = if (x.weight.abs > y.weight.abs) (x, y) else (y, x)  // more stable this way
@@ -38,6 +38,7 @@ object WeightedMean {
           Stats(newWeight, a.mean + (b.mean - a.mean) * (b.weight / newWeight))
         }
       }
+      override def negate(x: Stats[N]): Stats[N] = x.copy(weight = -x.weight)
     }
   }
 }
@@ -97,7 +98,7 @@ object LazyStats {
   def weightedMean[N: Field](xs: TraversableOnce[Weighted[N]]): N  = WeightedMean.of(xs)
 
   def weightedRunningMean[N: Field](xs: TraversableOnce[Weighted[N]]): Iterator[N]  = {
-    val am = WeightedMean.Stats.hasAdditiveMonoid[N]
-    xs.toIterator.map(wx => WeightedMean.Stats.of(wx)).scanLeft(am.zero)(am.plus).map(_.mean)
+    val G = WeightedMean.Stats.hasAdditiveGroup[N]
+    xs.toIterator.map(wx => WeightedMean.Stats.of(wx)).scanLeft(G.zero)(G.plus).map(_.mean)
   }
 }

@@ -10,20 +10,28 @@ import spire.implicits._
 
 
 object LazyStatsTest {
-  implicit def arbWeighted[X : Arbitrary]: Arbitrary[Weighted[X]] = Arbitrary(
+  implicit def arbWeighted[X : Arbitrary]: Arbitrary[Weighted[X]] = Arbitrary {
     for (
       w <- arbitrary[Float];
       x <- arbitrary[X]
-    ) yield Weighted(x, w.abs)
-  )
-  implicit def arbMse: Arbitrary[MseStats[Double]] = Arbitrary(
+    ) yield Weighted(x, w)
+  }
+
+  implicit def arbMean: Arbitrary[WeightedMean.Stats[Double]] = Arbitrary {
+    for (
+      w <- Gen.choose(-100.0, 100.0);
+      mean <- Gen.choose(-100.0, 100.0)
+    ) yield WeightedMean.Stats(w, mean)
+  }
+
+  implicit def arbMse: Arbitrary[MseStats[Double]] = Arbitrary {
     // floating point errors go wild if you let these numbers get too big
     for (
       w <- Gen.choose(-100.0, 100.0);
       mean <- Gen.choose(-100.0, 100.0);
-      mse <- Gen.choose(0.0, 100.0)
+      mse <- Gen.choose(0.0, 100.0) // must be non-negative
     ) yield MseStats(w, mean, mse)
-  )
+  }
 }
 
 class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with GeneratorDrivenPropertyChecks {
@@ -35,10 +43,15 @@ class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with Generat
     }
   }
 
+  def shouldBeRoughlyEqual(actual: WeightedMean.Stats[Double], expected: WeightedMean.Stats[Double]) {
+    shouldBeRoughlyEqual(actual.weight, expected.weight)
+    shouldBeRoughlyEqual(actual.mean, expected.mean)
+  }
+
   def shouldBeRoughlyEqual(actual: MseStats[Double], expected: MseStats[Double]) {
     shouldBeRoughlyEqual(actual.weight, expected.weight)
     shouldBeRoughlyEqual(actual.mean, expected.mean)
-    shouldBeRoughlyEqual(actual.meanSquare, expected.meanSquare)
+    shouldBeRoughlyEqual(actual.variance, expected.variance)
   }
 
   "LazyStats.mean" should "be sum / size" in {
@@ -59,6 +72,14 @@ class LazyStatsTest extends FlatSpec with TestHelpers with Matchers with Generat
     }
   }
 
+  "WeightedMean.Stats.minus" should "be inverse of plus" in {
+    forAll { (b: WeightedMean.Stats[Double], a: WeightedMean.Stats[Double]) =>
+      shouldBeRoughlyEqual(a, (a + b) - b)
+    }
+    forAll { (a: WeightedMean.Stats[Double], b: WeightedMean.Stats[Double]) =>
+      shouldBeRoughlyEqual(a, (a - b) + b)
+    }
+  }
   "WeightedMse.of" should "be weightedMean of squaredErrors" in {
     forAll { (head: Weighted[Double], tail: List[Weighted[Double]]) =>
       val input = head :: tail
