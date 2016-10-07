@@ -74,7 +74,7 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
           indices: Set[Int], // which of all the examples we're actually fitting to
           baseStats: WeightedMse.Stats[Double]): (DecisionTree[X, Double], Double) = {
     logger.debug("fitting regression tree, depth: " + maxDepth)
-    lazy val leaf = (Leaf.averaging(indices.map(db.example)), baseStats.error)
+    lazy val leaf = (Leaf(baseStats.mean), baseStats.error)
     if (maxDepth <= 1 || indices.isEmpty || baseStats.error <= tolerance) {
       leaf
     } else {
