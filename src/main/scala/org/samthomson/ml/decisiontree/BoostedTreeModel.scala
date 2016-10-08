@@ -196,45 +196,55 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
 
   def fit(data: Iterable[Example[X, Y]],
           numIterations: Int): (MultiClassModel[X, Y], Double) = {
-    val (lastModel, lastScore) = optimizationPath(data)(Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
+    val (lastModel, lastScore) = optimizationPath(data, Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
     (MultiClassModel(outputSpace, lastModel), lastScore)
   }
 
-  def optimizationPath(data: Iterable[Example[X, Y]])
-                      (initialModel: Model[(X, Y), Double]): Stream[(Ensemble[(X, Y), Double], Double)] = {
-    val candidates = data.map { ex =>
-      (ex, outputSpace(ex.input).toVector)
-    }.toVector
-    val ioPairs = candidates.flatMap { case (Example(x, goldLabel), cands) =>
-      // example output will get replaced inside `fitNextTree
-      cands.map(y => Weighted(Example((x, y), 0.0), 1.0))
+  def optimizationPath(examples: Iterable[Example[X, Y]],
+                       initialModel: Model[(X, Y), Double]): Stream[(Ensemble[(X, Y), Double], Double)] = {
+    // cache outputSpaces to make sure candidates always appear in same order
+    val examplesAndCandidates = examples.map { ex => (ex, outputSpace(ex.input).toVector) }.toVector
+    val db = {
+      val ioPairs = examplesAndCandidates.flatMap { case (e, candidates) =>
+        // example output will get replaced inside `fitNextTree
+        candidates.map(y => Weighted(Example((e.input, y), 0.0), 1.0))
+      }
+      IndexedExamples.build(ioPairs)(xyFeats)
     }
-    val db = IndexedExamples.build(ioPairs)(xyFeats)
-    unfold (Vector(initialModel)) { forest =>
-      val (oTree, loss) = fitNextTree(candidates, db, toModel(forest))
+    // cache the scores from previous iteration, so training runtime doesn't increase as the ensemble grows
+    val initialScores = {
+      val zeroScores = Map.empty[Y, Double].withDefaultValue(0.0)
+      Vector.fill(examplesAndCandidates.size)(zeroScores).par
+    }
+    unfold((Vector(initialModel), initialScores)) { case (forest, allOldScores) =>
+      val modelDiff = toModel(Vector(forest.last))
+      logger.debug("calculating scores")
+      val allScores = examplesAndCandidates.par.zip(allOldScores).map { case ((e, _), oldScores) =>
+        // our forest-so-far produces a score (real number) for each (input, output) pair.
+        oldScores + modelDiff.scores(e.input).toMap
+      }
+      logger.debug("calculating residuals")
+      val (residuals, loss) = getResiduals(examplesAndCandidates.zip(allScores))
+      val oTree = fitNextTree(db, residuals)
       oTree.map({ tree =>
         // yield the new tree, and update the "unfold" state to include the new tree
         val newForest = forest :+ tree
-        ((Ensemble(newForest), loss), newForest)
+        ((Ensemble(newForest), loss), (newForest, allScores))
       })
     }
   }
 
-  def fitNextTree(data: Vector[(Example[X, Y], Vector[Y])],
-                  db: IndexedExamples[(X, Y), Double, K],
-                  currentModel: MultiClassModel[X, Y]): (Option[DecisionTree[(X, Y), Double]], Double) = {
-    var totalLoss = MeanStats(0.0, 0.0)  // keep track of objective value (loss)
-    var n = 0  // number of examples
+  def getResiduals(examplesCandidatesAndScores: Vector[((Example[X, Y], Vector[Y]), Map[Y, Double])]): (Vector[Weighted[Double]], Double) = {
     // Calculate a 2nd-order Taylor expansion of loss w.r.t. scores, then
     // do the old AdaBoost thing where you turn the quadratic fns into a weighted
     // regression problem.
-    logger.debug("calculating residuals")
-    val residuals = data.flatMap { case (Example(input, goldLabel), candidates) =>
-      // our forest-so-far produces a score (real number) for each (input, output) pair.
-      val scores = currentModel.scores(input)
+    var totalLoss = MeanStats(0.0, 0.0) // keep track of objective value (loss)
+    var n = 0
+    // number of examples
+    val residuals = examplesCandidatesAndScores.flatMap { case ((e, candidates), scores) =>
       // calculate loss and its first two derivatives with respect to scores.
       // hessian is actually a diagonal approximation (i.e. ignores interactions btwn scores).
-      val (loss, gradient, hessian) = lossFn.lossGradAndHessian(goldLabel)(scores.toMap)
+      val (loss, gradient, hessian) = lossFn.lossGradAndHessian(e.output)(scores)
       totalLoss += MeanStats(1.0, loss)
       n += 1
       candidates.map { y =>
@@ -249,6 +259,11 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
       }
     }
     logger.debug(f"loss per example: ${totalLoss.mean}%10.5f")
+    (residuals, totalLoss.mean)
+  }
+
+  def fitNextTree(db: IndexedExamples[(X, Y), Double, K],
+                  residuals: Vector[Weighted[Double]]): Option[DecisionTree[(X, Y), Double]] = {
     val (nextTree, _) = regressionModel.fit(
       db.copy(outputs = residuals),
       db.inputs.indices.toSet,
@@ -258,8 +273,8 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
       case Leaf(avg) if math.abs(avg) <= lambda0 =>
         // don't waste my time with these mickey mouse trees
         logger.debug("Empty tree. Stopping.")
-        (None, totalLoss.mean)
-      case _ => (Some(nextTree), totalLoss.mean)
+        None
+      case _ => Some(nextTree)
     }
   }
 }
