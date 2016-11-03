@@ -10,18 +10,18 @@ import org.scalatest.{FlatSpec, Matchers}
 object BoostedTreeModelTest {
   val outputSpace = Set("cat", "dog")
   val xyFeats = {
-    val inputFeats = MixedMap.featSet(Set("is_animal", "is_tall"), Set("tail_length"))
+    val inputFeats = MixedMap.featSet(Set("is_animal", "is_tall"), Set("tail_length"), Set())
     val outputFeats = FeatureSet.oneHot(outputSpace)
     FeatureSet.Mixed.concat(inputFeats, outputFeats)
   }
   val lambda0 = 0.0 // 1e-7
   val lambda2 = 1.0
   val data: Vector[Example[MixedMap[String], String]] = Vector(
-    Example(MixedMap(Set("is_animal", "is_tall"), Map("tail_length" -> -1.0)), "dog"),
-    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  0.0)), "cat"),
-    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  1.0)), "dog"),
-    Example(MixedMap(Set("is_animal", "is_tall"), Map("tail_length" ->  1.1)), "dog"),
-    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  1.2)), "cat")
+    Example(MixedMap(Set("is_animal", "is_tall"), Map("tail_length" -> -1.0), Map()), "dog"),
+    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  0.0), Map()), "cat"),
+    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  1.0), Map()), "dog"),
+    Example(MixedMap(Set("is_animal", "is_tall"), Map("tail_length" ->  1.1), Map()), "dog"),
+    Example(MixedMap(Set("is_animal"),            Map("tail_length" ->  1.2), Map()), "cat")
   )
 }
 

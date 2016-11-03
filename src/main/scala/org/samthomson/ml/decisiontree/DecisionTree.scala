@@ -29,8 +29,11 @@ object Splitter {
         "feature" -> Json.fromString(f.toString),
         "threshold" -> Json.fromDoubleOrString(t)
       )
-      case BoolSplitter(f) => Json.obj("feature" -> Json.fromString(f.toString))
-      case OrSplitter(fs) => Json.obj("features" -> fs.map(_.toString).asJson)
+      case BoolSplitter(k) => Json.obj("feature" -> Json.fromString(k.toString))
+      case OrSplitter(k, vs) => Json.obj(
+        "feature" -> Json.fromString(k.toString),
+        "values" -> vs.map(_.toString).asJson
+      )
     }
   implicit def decoder[F, X](implicit feats: FeatureSet.Mixed[F, X],
                              fDec: Decoder[F]): Decoder[Splitter[X]] = {
@@ -40,7 +43,12 @@ object Splitter {
         threshold <- cursor.get[Double]("threshold")
       ) yield FeatureThreshold[F, X](feature, threshold)(feats.continuous)
     }
-    val orDec: Decoder[Splitter[X]] = Decoder.instance(_.get[Iterable[F]]("features").map(OrSplitter(_)(feats.binary)))
+    val orDec: Decoder[Splitter[X]] = Decoder.instance { cursor =>
+      for (
+        feature <- cursor.get[F]("feature");
+        values <- cursor.get[Set[String]]("values")
+      ) yield OrSplitter[F, X](feature, values)(feats.categorical)
+    }
     val boolDec: Decoder[Splitter[X]] = Decoder.instance(_.get[F]("feature").map(BoolSplitter(_)(feats.binary)))
     threshDec or orDec or boolDec
   }
@@ -56,12 +64,11 @@ case class BoolSplitter[+F, -X](feature: F)
   override def isLeft(input: X): Boolean = bf.get(feature)(input)
   override def toString: String = s"$feature"
 }
-case class OrSplitter[+F, -X](features: Iterable[F])
-                             (implicit bf: FeatureSet.Binary[F, X]) extends Splitter[X] {
-  override def isLeft(input: X): Boolean = features.exists(bf.get(_)(input))
-  override def toString: String = s"or(${features.mkString(", ")})"
+case class OrSplitter[+F, -X](feature: F, values: Set[String])
+                             (implicit bf: FeatureSet.Categorical[F, X]) extends Splitter[X] {
+  override def isLeft(input: X): Boolean = values.contains(bf.get(feature)(input))
+  override def toString: String = s"$feature in {${values.mkString(", ")}}"
 }
-
 
 @SerialVersionUID(1L)
 sealed trait DecisionTree[-X, +Y] extends Model[X, Y] {

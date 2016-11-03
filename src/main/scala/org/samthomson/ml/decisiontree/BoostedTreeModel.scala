@@ -25,7 +25,8 @@ import scala.math._
 case class IndexedExamples[X, Y, K](inputs: IndexedSeq[X],
                                     outputs: IndexedSeq[Weighted[Y]],
                                     binaryIndex: GenMap[K, Set[Int]],
-                                    continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]]) {
+                                    continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]],
+                                    categoricalIndex: GenMap[K, GenMap[String, Set[Int]]]) {
   def example(i: Int): Weighted[Example[X, Y]] = outputs(i).map(Example(inputs(i), _))
 }
 object IndexedExamples extends LazyLogging {
@@ -37,10 +38,13 @@ object IndexedExamples extends LazyLogging {
     val outputs = examples.map(_.map(_.output))
     val binary = mixed.binary
     val continuous = mixed.continuous
+    val categorical = mixed.categorical
     val binaryIndex = m.Map.empty[K, m.Set[Int]]
     val continuousIndex = m.Map.empty[K, m.Map[Double, m.Set[Int]]]
+    val categoricalIndex = m.Map.empty[K, m.Map[String, m.Set[Int]]]
     examples.zipWithIndex.foreach {
       case (Weighted(Example(x, y), w), i) =>
+        // TODO: use DefaultDict
         for ((k, v) <- binary.featVals(x)) {
           if (!binaryIndex.contains(k)) binaryIndex(k) = m.Set.empty
           binaryIndex(k) += i
@@ -50,13 +54,19 @@ object IndexedExamples extends LazyLogging {
           if (!continuousIndex(k).contains(v)) continuousIndex(k)(v) = m.Set.empty
           continuousIndex(k)(v) += i
         }
+        for ((k, v) <- categorical.featVals(x)) {
+          if (!categoricalIndex.contains(k)) categoricalIndex(k) = m.Map.empty
+          if (!categoricalIndex(k).contains(v)) categoricalIndex(k)(v) = m.Set.empty
+          categoricalIndex(k)(v) += i
+        }
     }
     logger.debug("Done building feature index.")
     IndexedExamples(
       inputs,
       outputs,
-      binaryIndex.mapValues(_.toSet).toMap,
-      continuousIndex.mapValues(_.mapValues(_.toSet).toSeq.sortBy(_._1))
+      Map() ++ binaryIndex.mapValues(_.toSet),
+      Map() ++ continuousIndex.mapValues(_.mapValues(_.toSet).toSeq.sortBy(_._1)),
+      Map() ++ categoricalIndex.mapValues(_.mapValues(_.toSet))
     )
   }
 }
@@ -111,8 +121,11 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
   // finds the split that minimizes squared error
   def bestSplitAndStats(examples: IndexedExamples[X, Double, K],
                         indices: Set[Int],
-                        totalStats: WeightedMse.Stats[Double]): Option[(Splitter[X], LeftAndRightStats)] = {
-    val allSplits = continuousSplitsAndStats(examples, indices) ++ binarySplitsAndStats(examples, indices, totalStats)
+                        totalStats: MseStats[Double]): Option[(Splitter[X], LeftAndRightStats)] = {
+    val allSplits =
+      continuousSplitsAndStats(examples, indices) ++
+          binarySplitsAndStats(examples, indices, totalStats) ++
+          categoricalSplitsAndErrors(examples, indices, totalStats)
     val nonUselessSplits = allSplits.filter { case (split, stats) => stats.left.weight > 0 && stats.right.weight > 0 }
     if (nonUselessSplits.nonEmpty) {
       Some(nonUselessSplits.minBy(_._2.totalErrAndEvenness))
@@ -149,24 +162,22 @@ case class RegressionTreeModel[K, X](feats: Mixed[K, X],
       splits zip errors
     }
 
-  def categoricalSplitsAndErrors(examples: Iterable[Weighted[Example[X, Double]]],
-                                 exclusiveFeats: Set[K]): Seq[(OrSplitter[K, X], LeftAndRightStats)] = {
-    // TODO: use IndexedExamples
-    val binary = feats.binary
-    val stats = exclusiveFeats.par
-        .map({feat =>
-          val getK = binary.get(feat)(_)
-          feat -> MseStats.of(examples.filter(e => getK(e.input)).map(_.map(_.output)))
-        }).toVector
-        .sortBy(_._2.mean)
-    // TODO: consider non-contiguous splits?
-    val splits = stats.map(_._1).scanLeft(Set[K]())({ case (s, f) => s + f }).tail.map(s => OrSplitter(s)(binary))
-    val errors = {
-      val leftErrors = stats.map(_._2).scanLeft(G.zero)(G.plus).tail
-      val rightErrors = stats.map(_._2).scanRight(G.zero)(G.plus).tail
-      (leftErrors zip rightErrors).map { case (l, r) => LeftAndRightStats(l, r) }
+  def categoricalSplitsAndErrors(db: IndexedExamples[X, Double, K],
+                                 indices: Set[Int],
+                                 totalStats: MseStats[Double]): GenMap[OrSplitter[K, X], LeftAndRightStats] = {
+    implicit val categorical = feats.categorical
+    db.categoricalIndex.par.flatMap { case (k, valMap) =>
+      // for each feature, group examples by value, and sort by their mean
+      val statsByVal = valMap.mapValues({ xs =>
+        stats(db)(xs.intersect(indices))
+      }).filter(_._2.weight > 0.0).toVector.sortBy(_._2.mean)
+      // consider each split point along the sorted list
+      statsByVal.scanLeft((OrSplitter(k, Set()), LeftAndRightStats(MseStats.of(Seq()), totalStats))) {
+        case ((acc, accStats), (v, kStats)) =>
+          OrSplitter(k, acc.values + v) ->
+              LeftAndRightStats(accStats.left + kStats, accStats.right - kStats)
+      }
     }
-    splits zip errors
   }
 }
 
