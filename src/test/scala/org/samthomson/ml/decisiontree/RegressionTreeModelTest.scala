@@ -9,14 +9,9 @@ import spire.implicits._
 object RegressionTreeModelTest {
   val lambda0 = 0.1
 
-  val abFeats = MixedMap.featSet(Set(), Set("a", "b"), Set())
+  val stringFeats = MixedMap.featSet[String]
   val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
-    case ((a, b), y) => Example(MixedMap(Set(), Map("a" -> a, "b" -> b), Map()), y)
-  }
-
-  val catFeats = MixedMap.featSet(Set(), Set(), Set("X"))
-  val toCategoricalExample: ((String, Double)) => Example[MixedMap[String], Double] = {
-    case (v, y) => Example(MixedMap(Set(), Map(), Map("X" -> v)), y)
+    case ((a, b), y) => Example(MixedMap.continuous(Map("a" -> a, "b" -> b)), y)
   }
   val data = Vector(
     ((-1.0, 1.0), -1.0),
@@ -24,6 +19,9 @@ object RegressionTreeModelTest {
     (( 1.0, 1.0),  5.0),
     (( 1.1, 1.0),  4.0)
   ).map(toExample).map(Weighted(_, 1.0))
+  val toCategoricalExample: ((String, Double)) => Example[MixedMap[String], Double] = {
+    case (v, y) => Example(MixedMap.categorical(Map("X" -> v)), y)
+  }
   val categoricalData = Vector(
     ("a", -1.0),
     ("b", 1.0),
@@ -38,7 +36,7 @@ object RegressionTreeModelTest {
 
 class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   import RegressionTreeModelTest._
-  val regressionModel = RegressionTreeModel(abFeats, lambda0, maxDepth = 3)
+  val regressionModel = RegressionTreeModel(stringFeats, lambda0, maxDepth = 3)
 
   "RegressionTree.fitRegression" should "fit perfectly given enough depth" in {
     val (tree, loss) = regressionModel.fit(data)
@@ -76,8 +74,8 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
   }
 
   "categoricalSplitsAndErrors" should "find subsets of features with equal weights" in {
-    val db = IndexedExamples.build(evenCategoricalData)(catFeats)
-    val model = RegressionTreeModel(catFeats, lambda0, maxDepth = 1)
+    val db = IndexedExamples.build(evenCategoricalData)(stringFeats)
+    val model = RegressionTreeModel(stringFeats, lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(
       db,
       db.inputs.indices.toSet,
@@ -89,8 +87,8 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
   }
 
   it should "find subsets of features with unequal weights" in {
-    val db = IndexedExamples.build(unevenCategoricalData)(catFeats)
-    val model = RegressionTreeModel(catFeats, lambda0, maxDepth = 1)
+    val db = IndexedExamples.build(unevenCategoricalData)(stringFeats)
+    val model = RegressionTreeModel(stringFeats, lambda0, maxDepth = 1)
     val splits = model.categoricalSplitsAndErrors(
       db,
       db.inputs.indices.toSet,
@@ -102,8 +100,8 @@ class RegressionTreeModelTest extends FlatSpec with Matchers with GeneratorDrive
   }
 
   "RegressionTree" should "serialize and deserialize to/from json" in {
-    implicit val fs = abFeats
-    val model = RegressionTreeModel(catFeats, lambda0, maxDepth = 4)
+    implicit val fs = stringFeats
+    val model = RegressionTreeModel(stringFeats, lambda0, maxDepth = 4)
     val (tree, _) = model.fit(evenCategoricalData)
     val serialized = tree.asJson.noSpaces
     val deserialized = DecisionTree.fromJson[MixedMap[String], Double](serialized)

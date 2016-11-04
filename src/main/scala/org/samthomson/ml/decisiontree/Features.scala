@@ -1,7 +1,5 @@
 package org.samthomson.ml.decisiontree
 
-import org.samthomson.ml.decisiontree.FeatureSet.SparseBinary
-
 import scala.language.implicitConversions
 
 
@@ -24,14 +22,13 @@ object FeatureSet {
   type Continuous[K, -X] = FeatureSet[K, Double, X]
   type Categorical[K, -X] = FeatureSet[K, String, X]  // TODO: r/String/???
 
-  def apply[K, V, X](fs: Set[K])
-                    (g: X => Map[K, V]): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
+  def apply[K, V, X](g: X => Map[K, V]): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
     override def featVals(x: X): Map[K, V] = g(x)
     override def get(feat: K)(x: X): V = g(x)(feat)
   }
 
   def empty[K]: FeatureSet[K, Nothing, Any] = {
-    FeatureSet[K, Nothing, Any](Set())(f => Map.empty)
+    FeatureSet[K, Nothing, Any](_ => Map.empty)
   }
 
   def concat[K1, K2, V, X, Y](implicit
@@ -51,12 +48,12 @@ object FeatureSet {
     }
   }
 
-  case class SparseBinary[K](feats: Set[K]) extends Binary[K, Set[K]] {
-    override def get(feat: K)(x: Set[K]): Boolean = x.contains(feat)
-    override def featVals(x: Set[K]): Map[K, Boolean] = x.iterator.map(_ -> true).toMap.withDefaultValue(false)
+  def sparse[X, K](f: X => Set[K]): Binary[K, X] = new Binary[K, X] {
+    override def get(feat: K)(x: X): Boolean = f(x).contains(feat)
+    override def featVals(x: X): Map[K, Boolean] = f(x).iterator.map(_ -> true).toMap.withDefaultValue(false)
   }
 
-  def oneHot[K](feats: Set[K]): Binary[K, K] = SparseBinary(feats) compose (Set(_))
+  def oneHot[K](feats: Set[K]): Binary[K, K] = sparse(Set(_))
 
   case class Composed[A, B, K, V](featureSet: FeatureSet[K, V, B], f: A => B) extends FeatureSet[K, V, A] {
     override def get(feat: K)(x: A): V = featureSet.get(feat)(f(x))
@@ -94,24 +91,36 @@ object FeatureSet {
 @SerialVersionUID(1L)
 case class MixedMap[F](binarySet: Set[F],
                        continuousMap: Map[F, Double],
-                       categoricalMap: Map[F, String])
+                       categoricalMap: Map[F, String]) {
+  def filter(p: F => Boolean): MixedMap[F] = MixedMap(
+    binarySet.filter(p),
+    continuousMap.filterKeys(p),
+    categoricalMap.filterKeys(p)
+  )
+  def map[B](f: F => B): MixedMap[B] = MixedMap(
+    binarySet.map(f),
+    continuousMap.map { case (k, v) => (f(k), v) },
+    categoricalMap.map { case (k, v) => (f(k), v) }
+  )
+  def ++(other: MixedMap[F]): MixedMap[F] = MixedMap(
+    binarySet ++ other.binarySet,
+    continuousMap ++ other.continuousMap,
+    categoricalMap ++ other.categoricalMap
+  )
+}
 
 object MixedMap {
-  def concat[F](a: MixedMap[F],
-                b: MixedMap[F]): MixedMap[F] = {
-    MixedMap(
-      a.binarySet ++ b.binarySet,
-      a.continuousMap ++ b.continuousMap,
-      a.categoricalMap ++ b.categoricalMap
-    )
-  }
-  def featSet[F](binaryFeats: Set[F],
-                 continuousFeats: Set[F],
-                 categoricalFeats: Set[F]): FeatureSet.Mixed[F, MixedMap[F]] = {
+  def featSet[F]: FeatureSet.Mixed[F, MixedMap[F]] = {
     FeatureSet.Mixed(
-      SparseBinary(binaryFeats) compose (_.binarySet),
-      FeatureSet(continuousFeats)(_.continuousMap.withDefaultValue(0.0)),
-      FeatureSet(categoricalFeats)(_.categoricalMap)
+      FeatureSet.sparse(_.binarySet),
+      FeatureSet(_.continuousMap.withDefaultValue(0.0)),
+      FeatureSet(_.categoricalMap)
     )
   }
+
+  def empty[F]: MixedMap[F] = MixedMap(Set(), Map(), Map())
+
+  def binary[F](ks: Set[F]): MixedMap[F] = MixedMap(ks, Map(), Map())
+  def continuous[F](ks: Map[F, Double]): MixedMap[F] = MixedMap(Set(), ks, Map())
+  def categorical[F](ks: Map[F, String]): MixedMap[F] = MixedMap(Set(), Map(), ks)
 }
