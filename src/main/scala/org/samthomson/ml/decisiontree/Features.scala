@@ -60,30 +60,27 @@ object FeatureSet {
     override def featVals(x: A): Map[K, V] = featureSet.featVals(f(x))
   }
 
-  trait Mixed[K, -X] {
-    def binary: Binary[K, X]
-    def continuous: Continuous[K, X]
-    def categorical: Categorical[K, X]
+  case class Mixed[K, -X](binary: Binary[K, X],
+                          continuous: Continuous[K, X],
+                          categorical: Categorical[K, X]) {
+    def compose[B](f: B => X): Mixed[K, B] = Mixed(
+      binary compose f,
+      continuous compose f,
+      categorical compose f
+    )
   }
 
   object Mixed {
-    def apply[F, X](b: Binary[F, X],
-                    c: Continuous[F, X],
-                    x: Categorical[F, X]): Mixed[F, X] = new Mixed[F, X] {
-      override val binary = b
-      override val continuous = c
-      override val categorical = x
-    }
     implicit def fromBinary[F, X](b: Binary[F, X]): Mixed[F, X] = Mixed(b, empty, empty)
     implicit def fromContinuous[F, X](c: Continuous[F, X]): Mixed[F, X] = Mixed(empty, c, empty)
     implicit def fromCategorical[F, X](c: Categorical[F, X]): Mixed[F, X] = Mixed(empty, empty, c)
 
     def concat[F1, F2, X, Y](implicit FX: Mixed[F1, X], FY: Mixed[F2, Y]): Mixed[Either[F1, F2], (X, Y)] = {
-      new Mixed[Either[F1, F2], (X, Y)] {
-        override def binary = FeatureSet.concat(FX.binary, FY.binary)
-        override def continuous = FeatureSet.concat(FX.continuous, FY.continuous)
-        override def categorical = FeatureSet.concat(FX.categorical, FY.categorical)
-      }
+      Mixed[Either[F1, F2], (X, Y)](
+        FeatureSet.concat(FX.binary, FY.binary),
+        FeatureSet.concat(FX.continuous, FY.continuous),
+        FeatureSet.concat(FX.categorical, FY.categorical)
+      )
     }
   }
 }
@@ -110,7 +107,7 @@ case class MixedMap[F](binarySet: Set[F],
 }
 
 object MixedMap {
-  def featSet[F]: FeatureSet.Mixed[F, MixedMap[F]] = {
+  implicit def featSet[F]: FeatureSet.Mixed[F, MixedMap[F]] = {
     FeatureSet.Mixed(
       FeatureSet.sparse(_.binarySet),
       FeatureSet(_.continuousMap.withDefaultValue(0.0)),
