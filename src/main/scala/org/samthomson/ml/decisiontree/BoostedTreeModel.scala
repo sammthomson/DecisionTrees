@@ -26,7 +26,7 @@ case class IndexedExamples[X, Y, K](inputs: IndexedSeq[X],
                                     outputs: IndexedSeq[Weighted[Y]],
                                     binaryIndex: GenMap[K, Set[Int]],
                                     continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]],
-                                    categoricalIndex: GenMap[K, GenMap[String, Set[Int]]]) {
+                                    categoricalIndex: GenMap[K, GenMap[K, Set[Int]]]) {
   def example(i: Int): Weighted[Example[X, Y]] = outputs(i).map(Example(inputs(i), _))
 }
 object IndexedExamples extends LazyLogging {
@@ -41,7 +41,7 @@ object IndexedExamples extends LazyLogging {
     val categorical = mixed.categorical
     val binaryIndex = m.Map.empty[K, m.Set[Int]]
     val continuousIndex = m.Map.empty[K, m.Map[Double, m.Set[Int]]]
-    val categoricalIndex = m.Map.empty[K, m.Map[String, m.Set[Int]]]
+    val categoricalIndex = m.Map.empty[K, m.Map[K, m.Set[Int]]]
     examples.zipWithIndex.foreach {
       case (Weighted(Example(x, y), w), i) =>
         // TODO: use DefaultDict

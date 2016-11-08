@@ -46,7 +46,7 @@ object Splitter {
     val orDec: Decoder[Splitter[X]] = Decoder.instance { cursor =>
       for (
         feature <- cursor.get[F]("feature");
-        values <- cursor.get[Set[String]]("values")
+        values <- cursor.get[Set[F]]("values")
       ) yield OrSplitter[F, X](feature, values)(feats.categorical)
     }
     val boolDec: Decoder[Splitter[X]] = Decoder.instance(_.get[F]("feature").map(BoolSplitter(_)(feats.binary)))
@@ -64,8 +64,8 @@ case class BoolSplitter[+F, -X](feature: F)
   override def isLeft(input: X): Boolean = bf.get(feature)(input)
   override def toString: String = s"$feature"
 }
-case class OrSplitter[+F, -X](feature: F, values: Set[String])
-                             (implicit bf: FeatureSet.Categorical[F, X]) extends Splitter[X] {
+case class OrSplitter[F, -X](feature: F, values: Set[F])
+                            (implicit bf: FeatureSet.Categorical[F, X]) extends Splitter[X] {
   override def isLeft(input: X): Boolean = values.contains(bf.get(feature)(input))
   override def toString: String = s"$feature in {${values.mkString(", ")}}"
 }

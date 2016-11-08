@@ -1,7 +1,7 @@
 package org.samthomson.ml.decisiontree
 
 import scala.language.implicitConversions
-
+import java.{util => ju, lang => jl}, ju.{function => jf}
 
 /**
   * Evidence that `F`s hold features of type `K` with values of type `V`.
@@ -20,7 +20,7 @@ trait FeatureSet[K, +V, -X] extends Serializable {
 object FeatureSet {
   type Binary[K, -X] = FeatureSet[K, Boolean, X]
   type Continuous[K, -X] = FeatureSet[K, Double, X]
-  type Categorical[K, -X] = FeatureSet[K, String, X]  // TODO: r/String/???
+  type Categorical[K, -X] = FeatureSet[K, K, X]
 
   def apply[K, V, X](g: X => Map[K, V]): FeatureSet[K, V, X] = new FeatureSet[K, V, X] {
     override def featVals(x: X): Map[K, V] = g(x)
@@ -31,9 +31,9 @@ object FeatureSet {
     FeatureSet[K, Nothing, Any](_ => Map.empty)
   }
 
-  def concat[K1, K2, V, X, Y](implicit
-                              FX: FeatureSet[K1, V, X],
-                              FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
+  def concat[K1, K2, V, X, Y]
+            (implicit FX: FeatureSet[K1, V, X],
+                      FY: FeatureSet[K2, V, Y]): FeatureSet[Either[K1, K2], V, (X, Y)] = {
     new FeatureSet[Either[K1, K2], V, (X, Y)] {
       override def get(feat: Either[K1, K2])(xy: (X, Y)) = (xy, feat) match {
         case ((x, _), Left(f)) => FX.get(f)(x)
@@ -44,6 +44,23 @@ object FeatureSet {
         Map() ++
             FX.featVals(x).map { case (k, v) => Left(k)  -> v } ++
             FY.featVals(y).map { case (k, v) => Right(k) -> v }
+      }
+    }
+  }
+
+  def concatCat[K1, K2, V1, V2, X, Y]
+               (implicit FX: FeatureSet[K1, V1, X],
+                         FY: FeatureSet[K2, V2, Y]): FeatureSet[Either[K1, K2], Either[V1, V2], (X, Y)] = {
+    new FeatureSet[Either[K1, K2], Either[V1, V2], (X, Y)] {
+      override def get(feat: Either[K1, K2])(xy: (X, Y)) = (xy, feat) match {
+        case ((x, _), Left(f))  => Left(FX.get(f)(x))
+        case ((_, y), Right(f)) => Right(FY.get(f)(y))
+      }
+      override def featVals(xy: (X, Y)): Map[Either[K1, K2], Either[V1, V2]] = {
+        val (x, y) = xy
+        Map() ++
+            FX.featVals(x).map { case (k, v) => Left(k)  -> Left(v)  } ++
+            FY.featVals(y).map { case (k, v) => Right(k) -> Right(v) }
       }
     }
   }
@@ -79,7 +96,7 @@ object FeatureSet {
       Mixed[Either[F1, F2], (X, Y)](
         FeatureSet.concat(FX.binary, FY.binary),
         FeatureSet.concat(FX.continuous, FY.continuous),
-        FeatureSet.concat(FX.categorical, FY.categorical)
+        FeatureSet.concatCat(FX.categorical, FY.categorical)
       )
     }
   }
@@ -88,7 +105,7 @@ object FeatureSet {
 @SerialVersionUID(1L)
 case class MixedMap[F](binarySet: Set[F],
                        continuousMap: Map[F, Double],
-                       categoricalMap: Map[F, String]) {
+                       categoricalMap: Map[F, F]) {
   def filter(p: F => Boolean): MixedMap[F] = MixedMap(
     binarySet.filter(p),
     continuousMap.filterKeys(p),
@@ -97,13 +114,22 @@ case class MixedMap[F](binarySet: Set[F],
   def map[B](f: F => B): MixedMap[B] = MixedMap(
     binarySet.map(f),
     continuousMap.map { case (k, v) => (f(k), v) },
-    categoricalMap.map { case (k, v) => (f(k), v) }
+    categoricalMap.map { case (k, v) => (f(k), f(v)) }
   )
   def ++(other: MixedMap[F]): MixedMap[F] = MixedMap(
     binarySet ++ other.binarySet,
     continuousMap ++ other.continuousMap,
     categoricalMap ++ other.categoricalMap
   )
+
+  def toJava(joiner: jf.Function[F, jf.Function[F, F]]): ju.Map[F, jl.Double] = {
+    val result = new ju.HashMap[F, jl.Double]
+    val flattened = binarySet.map(_ -> 1.0) ++
+        continuousMap ++
+        categoricalMap.map { case (k, v) => joiner(k)(v) -> 1.0 }
+    flattened.foreach{ case (k, v) => result.put(k, jl.Double.valueOf(v)) }
+    result
+  }
 }
 
 object MixedMap {
@@ -119,5 +145,5 @@ object MixedMap {
 
   def binary[F](ks: Set[F]): MixedMap[F] = MixedMap(ks, Map(), Map())
   def continuous[F](ks: Map[F, Double]): MixedMap[F] = MixedMap(Set(), ks, Map())
-  def categorical[F](ks: Map[F, String]): MixedMap[F] = MixedMap(Set(), Map(), ks)
+  def categorical[F](ks: Map[F, F]): MixedMap[F] = MixedMap(Set(), Map(), ks)
 }
