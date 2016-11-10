@@ -8,7 +8,7 @@ import org.samthomson.ml.WeightedMean.{Stats => MeanStats}
 import org.samthomson.ml.decisiontree.FeatureSet.Mixed
 import org.samthomson.util.StreamFunctions.unfold
 import spire.implicits._
-import scala.collection.{mutable => m, GenMap, GenSeq}
+import scala.{collection => c}, c.{mutable => m, GenMap}
 import scala.math._
 
 
@@ -24,9 +24,9 @@ import scala.math._
   */
 case class IndexedExamples[X, Y, K](inputs: IndexedSeq[X],
                                     outputs: IndexedSeq[Weighted[Y]],
-                                    binaryIndex: GenMap[K, Set[Int]],
-                                    continuousIndex: GenMap[K, GenSeq[(Double, Set[Int])]],
-                                    categoricalIndex: GenMap[K, GenMap[K, Set[Int]]]) {
+                                    binaryIndex: c.Map[K, c.Set[Int]],
+                                    continuousIndex: c.Map[K, c.Seq[(Double, c.Set[Int])]],
+                                    categoricalIndex: c.Map[K, c.Map[K, c.Set[Int]]]) {
   def example(i: Int): Weighted[Example[X, Y]] = outputs(i).map(Example(inputs(i), _))
 }
 object IndexedExamples extends LazyLogging {
@@ -64,9 +64,9 @@ object IndexedExamples extends LazyLogging {
     IndexedExamples(
       inputs,
       outputs,
-      Map() ++ binaryIndex.mapValues(_.toSet),
-      Map() ++ continuousIndex.mapValues(_.mapValues(_.toSet).toSeq.sortBy(_._1)),
-      Map() ++ categoricalIndex.mapValues(_.mapValues(_.toSet))
+      binaryIndex,
+      continuousIndex.mapValues(_.toSeq.sortBy(_._1)),
+      categoricalIndex
     )
   }
 }
@@ -207,11 +207,12 @@ case class BoostedTreeModel[K, X, Y](outputSpace: X => Iterable[Y],
 
   def fit(data: Iterable[Example[X, Y]],
           numIterations: Int): (MultiClassModel[X, Y], Double) = {
-    val (lastModel, lastScore) = optimizationPath(data, Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
+    val (lastModel, lastScore) =
+      optimizationPath(data, Ensemble(Vector[Model[(X, Y), Double]]())).take(numIterations).last
     (MultiClassModel(outputSpace, lastModel), lastScore)
   }
 
-  def optimizationPath(examples: Iterable[Example[X, Y]],
+  def optimizationPath(examples: TraversableOnce[Example[X, Y]],
                        initialModel: Model[(X, Y), Double]): Stream[(Ensemble[(X, Y), Double], Double)] = {
     // cache outputSpaces to make sure candidates always appear in same order
     val examplesAndCandidates = examples.map { ex => (ex, outputSpace(ex.input).toVector) }.toVector

@@ -109,7 +109,7 @@ case class MixedMap[F](binarySet: Set[F],
   def filter(p: F => Boolean): MixedMap[F] = MixedMap(
     binarySet.filter(p),
     continuousMap.filterKeys(p),
-    categoricalMap.filterKeys(p)
+    categoricalMap.filter { case (k, v) => p(k) && p(v) }
   )
   def map[B](f: F => B): MixedMap[B] = MixedMap(
     binarySet.map(f),
@@ -122,18 +122,14 @@ case class MixedMap[F](binarySet: Set[F],
     categoricalMap ++ other.categoricalMap
   )
 
-  def toJava(joiner: jf.Function[F, jf.Function[F, F]]): ju.Map[F, jl.Double] = {
-    val result = new ju.HashMap[F, jl.Double]
-    val flattened = binarySet.map(_ -> 1.0) ++
-        continuousMap ++
-        categoricalMap.map { case (k, v) => joiner(k)(v) -> 1.0 }
-    flattened.foreach{ case (k, v) => result.put(k, jl.Double.valueOf(v)) }
-    result
-  }
+  def keysIterator: Iterator[F] = binarySet.iterator ++
+        continuousMap.keysIterator ++
+        categoricalMap.keysIterator ++
+        categoricalMap.valuesIterator
 }
 
 object MixedMap {
-  implicit def featSet[F]: FeatureSet.Mixed[F, MixedMap[F]] = {
+  implicit def featureSet[F]: FeatureSet.Mixed[F, MixedMap[F]] = {
     FeatureSet.Mixed(
       FeatureSet.sparse(_.binarySet),
       FeatureSet(_.continuousMap.withDefaultValue(0.0)),

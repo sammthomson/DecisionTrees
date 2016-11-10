@@ -10,7 +10,7 @@ import org.scalatest.{FlatSpec, Matchers}
 object BoostedTreeModelTest {
   val outputSpace = Set("cat", "dog")
   val xyFeats = {
-    val inputFeats = MixedMap.featSet[String]
+    val inputFeats = MixedMap.featureSet[String]
     val outputFeats = FeatureSet.oneHot(outputSpace)
     FeatureSet.Mixed.concat(inputFeats, outputFeats)
   }

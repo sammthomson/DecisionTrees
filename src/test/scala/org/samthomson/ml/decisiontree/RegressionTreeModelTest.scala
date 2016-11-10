@@ -9,7 +9,7 @@ import spire.implicits._
 object RegressionTreeModelTest {
   val lambda0 = 0.1
 
-  val stringFeats = MixedMap.featSet[String]
+  val stringFeats = MixedMap.featureSet[String]
   val toExample: (((Double, Double), Double)) => Example[MixedMap[String], Double] = {
     case ((a, b), y) => Example(MixedMap.continuous(Map("a" -> a, "b" -> b)), y)
   }
